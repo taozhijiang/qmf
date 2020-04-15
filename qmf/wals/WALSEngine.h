@@ -88,6 +88,7 @@ class WALSEngine : public Engine {
                  const IdIndex& rightIndex);
 
   Matrix computeXtX(const Matrix& X);
+  void computeXtX(const Matrix& X, Matrix* out);
 
   /*
    *

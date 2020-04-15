@@ -15,8 +15,10 @@
 cmake_minimum_required(VERSION 2.8)
 project(qmf)
 
+#find_package(OpenMP REQUIRED)
+
 # settings
-set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wuninitialized")
+set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wuninitialized -fopenmp")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin/")
 set(CMAKE_FILES_DIRECTORY "build/")
 
@@ -60,6 +62,8 @@ endmacro(make_binary)
 
 make_binary(bpr.cpp bpr)
 make_binary(wals.cpp wals)
+#make_binary(wals_scheduler.cpp wals_scheduler)
+#make_binary(wals_worker.cpp wals_worker)
 
 make_binary(gen_uniform.cpp gen_uniform)
 

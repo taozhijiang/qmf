@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <random>
 
+#include <omp.h>
+
 #include <qmf/wals/WALSEngine.h>
 
 namespace qmf {
@@ -93,6 +95,8 @@ void WALSEngine::evaluate(const size_t epoch) {
   if (metricsEngine_ && !metricsEngine_->testAvgMetrics().empty() &&
       !testUsers_.empty() &&
       (metricsEngine_->config().alwaysCompute || epoch == config_.nepochs)) {
+        
+    LOG(INFO) << "do compute evaluate ..." << std::endl;
     computeTestScores(
       testScores_, testUsers_, *userFactors_, *itemFactors_, parallel_);
     metricsEngine_->computeAndRecordTestAvgMetrics(
@@ -163,7 +167,35 @@ Double WALSEngine::iterate(FactorData& leftData,
 
   Matrix& X = leftData.getFactors();
   const Matrix& Y = rightData.getFactors();
-  Matrix YtY = computeXtX(Y);
+  
+  // Matrix YtY = computeXtX(Y);
+  Matrix YtY(X.ncols(), X.ncols());
+  computeXtX(Y, &YtY);
+
+
+#if 1
+
+  omp_set_num_threads(16);
+
+  const size_t count = leftSignals.size();
+  
+  Double loss = 0.0;
+  const auto alpha = config_.confidenceWeight;
+  const auto lambda = config_.regularizationLambda;
+
+  #pragma omp parallel reduction(+: loss)
+  {
+
+  #pragma omp for 
+  for(size_t i=0; i<count; ++i) {
+    loss += updateFactorsForOne(X, leftIndex, Y, rightIndex, leftSignals[i], YtY, alpha, lambda);
+  }
+
+  }
+
+  return loss / nusers() / nitems();
+
+#else 
 
   auto map = [
     &X,
@@ -183,6 +215,9 @@ Double WALSEngine::iterate(FactorData& leftData,
 
   Double loss = parallel_.mapReduce(leftSignals.size(), map, reduce, 0.0);
   return loss / nusers() / nitems();
+
+#endif
+
 }
 
 Matrix WALSEngine::computeXtX(const Matrix& X) {
@@ -211,6 +246,27 @@ Matrix WALSEngine::computeXtX(const Matrix& X) {
 
   Matrix O(X.ncols(), X.ncols());
   return parallel_.mapReduce(ntasks, map, reduce, O);
+}
+
+
+void WALSEngine::computeXtX(const Matrix& X, Matrix* out) {
+
+  // assert X and out samesize
+
+  omp_set_num_threads(16);
+
+  const size_t nrows = X.nrows();
+  const size_t ncols = X.ncols();
+
+  #pragma omp parallel for 
+  for(size_t k = 0; k < nrows; ++k) {
+    for (size_t i = 0; i < ncols; ++i) {
+      for (size_t j = 0; j < ncols; ++j) {
+        (*out)(i, j) += X(k, i) * X(k, j);
+      }
+    }
+  }
+
 }
 
 Double WALSEngine::updateFactorsForOne(Matrix& X,
