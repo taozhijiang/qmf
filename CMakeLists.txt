@@ -24,6 +24,11 @@ set(CMAKE_FILES_DIRECTORY "build/")
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR})
 include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/qmf/third-party/gtest-1.7.0/fused-src)
 
+# other libs 
+set(macOS_PREFIX "/Volumes/CaseVolume/Repository/Dropbox/repos/macOS/")
+include_directories(SYSTEM ${macOS_PREFIX}/include )
+link_directories(${macOS_PREFIX}/lib )
+
 # subdirectories
 add_subdirectory(${PROJECT_SOURCE_DIR}/qmf/third-party/gtest-1.7.0/fused-src/gtest)
 
@@ -55,6 +60,8 @@ endmacro(make_binary)
 
 make_binary(bpr.cpp bpr)
 make_binary(wals.cpp wals)
+
+make_binary(gen_uniform.cpp gen_uniform)
 
 # unit testing
 macro(make_test test_source test_name)

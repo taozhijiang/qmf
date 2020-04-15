@@ -48,13 +48,18 @@ void WALSEngine::init(const std::vector<DatasetElem>& dataset) {
   userFactors_ = std::make_unique<FactorData>(nusers(), config_.nfactors);
   itemFactors_ = std::make_unique<FactorData>(nitems(), config_.nfactors);
 
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<Double> distr(
-    -config_.initDistributionBound, config_.initDistributionBound);
-  auto genUnif = [&distr, &gen](auto...) { return distr(gen); };
-  // don't need to initialize user factors
-  itemFactors_->setFactors(genUnif);
+  if(config_.DistributionFile.empty()) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<Double> distr(
+      -config_.initDistributionBound, config_.initDistributionBound);
+    auto genUnif = [&distr, &gen](auto...) { return distr(gen); };
+    // don't need to initialize user factors
+    itemFactors_->setFactors(genUnif);
+  } else {
+    itemFactors_->setFactors(config_.DistributionFile);
+  }
+
 }
 
 void WALSEngine::initTest(const std::vector<DatasetElem>& testDataset) {

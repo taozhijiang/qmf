@@ -28,6 +28,7 @@ DEFINE_uint64(nfactors, 30, "dimension of learned factors");
 DEFINE_double(regularization_lambda, 0.05, "regularization param");
 DEFINE_double(confidence_weight, 40, "confidence weight");
 DEFINE_double(init_distribution_bound, 0.01, "init distirbution bound");
+DEFINE_string(distribution_file, "", "uniform distribution file, for repeat result");
 
 // settings
 DEFINE_int32(nthreads, 16, "number of threads for parallel execution");
@@ -64,7 +65,8 @@ int main(int argc, char** argv) {
                          FLAGS_nfactors,
                          FLAGS_regularization_lambda,
                          FLAGS_confidence_weight,
-                         FLAGS_init_distribution_bound};
+                         FLAGS_init_distribution_bound,
+                         FLAGS_distribution_file};
 
   qmf::MetricsConfig metricsConfig{
     FLAGS_num_test_users, FLAGS_test_always, FLAGS_eval_seed};

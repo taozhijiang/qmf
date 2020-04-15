@@ -38,6 +38,7 @@ struct WALSConfig {
   Double regularizationLambda;
   Double confidenceWeight;
   Double initDistributionBound;
+  std::string DistributionFile;
 };
 
 class WALSEngine : public Engine {
