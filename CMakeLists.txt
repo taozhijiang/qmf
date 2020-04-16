@@ -62,9 +62,25 @@ endmacro(make_binary)
 
 make_binary(bpr.cpp bpr)
 make_binary(wals.cpp wals)
-#make_binary(wals_scheduler.cpp wals_scheduler)
-#make_binary(wals_worker.cpp wals_worker)
 
+
+# distributed version 
+set(DISTRIBUTED_SOURCES
+    ${PROJECT_SOURCE_DIR}/distributed/scheduler/Scheduler.cpp
+)
+add_library(distributed STATIC ${DISTRIBUTED_SOURCES})
+
+add_executable(wals_scheduler qmf/wals_scheduler.cpp)
+target_link_libraries(wals_scheduler distributed qmf pthread)
+set_target_properties(wals_scheduler
+        PROPERTIES RUNTIME_OUTPUT_DIRECTORY "bin/")
+
+add_executable(wals_labor qmf/wals_labor.cpp)
+target_link_libraries(wals_labor distributed qmf pthread)
+set_target_properties(wals_labor
+        PROPERTIES RUNTIME_OUTPUT_DIRECTORY "bin/")
+
+# generate uniform random to dest file
 make_binary(gen_uniform.cpp gen_uniform)
 
 # unit testing
