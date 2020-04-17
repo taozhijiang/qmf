@@ -26,9 +26,7 @@ namespace qmf {
 WALSEngine::WALSEngine(const WALSConfig& config,
                        const std::unique_ptr<MetricsEngine>& metricsEngine,
                        const size_t nthreads)
-  : config_(config),
-    metricsEngine_(metricsEngine),
-    parallel_(nthreads) {
+  : config_(config), metricsEngine_(metricsEngine), parallel_(nthreads) {
   if (metricsEngine_ && !metricsEngine_->testAvgMetrics().empty() &&
       metricsEngine_->config().numTestUsers == 0) {
     LOG(WARNING) << "computing average test metrics on all users can be slow! "
@@ -50,7 +48,7 @@ void WALSEngine::init(const std::vector<DatasetElem>& dataset) {
   userFactors_ = std::make_unique<FactorData>(nusers(), config_.nfactors);
   itemFactors_ = std::make_unique<FactorData>(nitems(), config_.nfactors);
 
-  if(config_.DistributionFile.empty()) {
+  if (config_.DistributionFile.empty()) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<Double> distr(
@@ -61,7 +59,6 @@ void WALSEngine::init(const std::vector<DatasetElem>& dataset) {
   } else {
     itemFactors_->setFactors(config_.DistributionFile);
   }
-
 }
 
 void WALSEngine::initTest(const std::vector<DatasetElem>& testDataset) {
@@ -83,7 +80,8 @@ void WALSEngine::optimize() {
     // fix item factors, update user factors
     iterate(*userFactors_, userIndex_, userSignals_, *itemFactors_, itemIndex_);
     // fix user factors, update item factors
-    const Double loss = iterate(*itemFactors_, itemIndex_, itemSignals_, *userFactors_, userIndex_);
+    const Double loss = iterate(
+      *itemFactors_, itemIndex_, itemSignals_, *userFactors_, userIndex_);
     LOG(INFO) << "epoch " << epoch << ": train loss = " << loss;
     // evaluate
     evaluate(epoch);
@@ -95,7 +93,7 @@ void WALSEngine::evaluate(const size_t epoch) {
   if (metricsEngine_ && !metricsEngine_->testAvgMetrics().empty() &&
       !testUsers_.empty() &&
       (metricsEngine_->config().alwaysCompute || epoch == config_.nepochs)) {
-        
+
     LOG(INFO) << "do compute evaluate ..." << std::endl;
     computeTestScores(
       testScores_, testUsers_, *userFactors_, *itemFactors_, parallel_);
@@ -167,46 +165,39 @@ Double WALSEngine::iterate(FactorData& leftData,
 
   Matrix& X = leftData.getFactors();
   const Matrix& Y = rightData.getFactors();
-  
+
   // Matrix YtY = computeXtX(Y);
   Matrix YtY(X.ncols(), X.ncols());
   computeXtX(Y, &YtY);
 
-
 #if 1
 
-  omp_set_num_threads(16);
+  // omp_set_num_threads(16);
 
   const size_t count = leftSignals.size();
-  
+
   Double loss = 0.0;
   const auto alpha = config_.confidenceWeight;
   const auto lambda = config_.regularizationLambda;
 
-  #pragma omp parallel reduction(+: loss)
+#pragma omp parallel reduction(+ : loss)
   {
 
-  #pragma omp for 
-  for(size_t i=0; i<count; ++i) {
-    loss += updateFactorsForOne(X, leftIndex, Y, rightIndex, leftSignals[i], YtY, alpha, lambda);
-  }
-
+#pragma omp for
+    for (size_t i = 0; i < count; ++i) {
+      const size_t leftIdx = leftIndex.idx(leftSignals[i].sourceId);
+      loss += updateFactorsForOne(X.data(leftIdx), X.ncols(), Y, rightIndex,
+                                  leftSignals[i], YtY, alpha, lambda);
+    }
   }
 
   return loss / nusers() / nitems();
 
-#else 
+#else
 
-  auto map = [
-    &X,
-    &leftIndex,
-    &Y,
-    &rightIndex,
-    &leftSignals,
-    YtY,
-    alpha = config_.confidenceWeight,
-    lambda = config_.regularizationLambda
-  ](const size_t taskId) {
+  auto map = [&X, &leftIndex, &Y, &rightIndex, &leftSignals, YtY,
+              alpha = config_.confidenceWeight,
+              lambda = config_.regularizationLambda](const size_t taskId) {
     return updateFactorsForOne(
       X, leftIndex, Y, rightIndex, leftSignals[taskId], YtY, alpha, lambda);
   };
@@ -217,7 +208,6 @@ Double WALSEngine::iterate(FactorData& leftData,
   return loss / nusers() / nitems();
 
 #endif
-
 }
 
 Matrix WALSEngine::computeXtX(const Matrix& X) {
@@ -240,33 +230,29 @@ Matrix WALSEngine::computeXtX(const Matrix& X) {
     return XtX;
   };
 
-  auto reduce = [](const Matrix& S, const Matrix& X) {
-    return S + X;
-  };
+  auto reduce = [](const Matrix& S, const Matrix& X) { return S + X; };
 
   Matrix O(X.ncols(), X.ncols());
   return parallel_.mapReduce(ntasks, map, reduce, O);
 }
 
-
 void WALSEngine::computeXtX(const Matrix& X, Matrix* out) {
 
   // assert X and out samesize
 
-  omp_set_num_threads(16);
+  // omp_set_num_threads(16);
 
   const size_t nrows = X.nrows();
   const size_t ncols = X.ncols();
 
-  #pragma omp parallel for 
-  for(size_t k = 0; k < nrows; ++k) {
+#pragma omp parallel for
+  for (size_t k = 0; k < nrows; ++k) {
     for (size_t i = 0; i < ncols; ++i) {
       for (size_t j = 0; j < ncols; ++j) {
         (*out)(i, j) += X(k, i) * X(k, j);
       }
     }
   }
-
 }
 
 Double WALSEngine::updateFactorsForOne(Matrix& X,
@@ -314,4 +300,50 @@ Double WALSEngine::updateFactorsForOne(Matrix& X,
   }
   return loss;
 }
+
+Double WALSEngine::updateFactorsForOne(Double* result,
+                                       const size_t n,
+                                       const Matrix& Y,
+                                       const IdIndex& rightIndex,
+                                       const SignalGroup& signalGroup,
+                                       Matrix A,
+                                       const Double alpha,
+                                       const Double lambda) {
+  Double loss = 0.0;
+  Vector b(n);
+  for (const auto& signal : signalGroup.group) {
+    const size_t rightIdx = rightIndex.idx(signal.id);
+    for (size_t i = 0; i < n; ++i) {
+      b(i) += Y(rightIdx, i) * (1.0 + alpha * signal.value);
+      for (size_t j = 0; j < n; ++j) {
+        A(i, j) += Y(rightIdx, i) * alpha * signal.value * Y(rightIdx, j);
+      }
+    }
+    // for term p^t * C * p
+    loss += 1.0 + alpha * signal.value;
+  }
+  // B = Y^t * C * Y
+  Matrix B = A;
+  for (size_t i = 0; i < n; ++i) {
+    A(i, i) += lambda;
+  }
+  // A * x = b
+  Vector x = linearSymmetricSolve(A, b);
+  // x^t * Y^t * C * Y * x
+  for (size_t i = 0; i < n; ++i) {
+    for (size_t j = 0; j < n; ++j) {
+      loss += B(i, j) * x(i) * x(j);
+    }
+  }
+  // -2 * x^t * Y^t * C * p
+  for (size_t i = 0; i < n; ++i) {
+    loss -= 2 * x(i) * b(i);
+  }
+
+  for (size_t i = 0; i < n; ++i) {
+    *(result + i) = x(i);
+  }
+  return loss;
 }
+
+} // namespace qmf

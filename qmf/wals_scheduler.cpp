@@ -26,24 +26,26 @@
 
 // scheduler network
 DEFINE_string(scheduler_ip, "0.0.0.0", "scheduler ip address");
-DEFINE_int32 (scheduler_port, 8900, "scheduler listen port");
-
+DEFINE_int32(scheduler_port, 8900, "scheduler listen port");
 
 int main(int argc, char** argv) {
-  
+
   gflags::SetUsageMessage("wals_scheduler");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   // make glog to log to stderr
   FLAGS_logtostderr = 1;
 
-  
-  auto scheduler = std::make_unique<distributed::scheduler::Scheduler>(FLAGS_scheduler_ip, FLAGS_scheduler_port);
-  if(!scheduler || !scheduler->init()) {
+  auto scheduler = std::make_unique<distributed::scheduler::Scheduler>(
+    FLAGS_scheduler_ip, FLAGS_scheduler_port);
+  if (!scheduler || !scheduler->init()) {
     LOG(ERROR) << "create or initialize scheduler failed.";
     return EXIT_FAILURE;
   }
 
+  while(true) {
+    ::sleep(1);
+  }
 
   return 0;
 }

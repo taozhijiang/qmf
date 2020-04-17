@@ -62,6 +62,11 @@ class Matrix {
     return &data_[0];
   }
 
+  // returns raw pointer to start line
+  Double* const data(const size_t r) {
+    return &data_[r * ncols_];
+  }
+
  private:
   size_t index(const size_t r, const size_t c) const {
     return r * ncols_ + c;

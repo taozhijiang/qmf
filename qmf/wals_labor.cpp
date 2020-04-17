@@ -25,7 +25,7 @@
 
 // scheduler network
 DEFINE_string(scheduler_ip, "127.0.0.1", "scheduler ip address");
-DEFINE_int32 (scheduler_port, 8900, "scheduler listen port");
+DEFINE_int32(scheduler_port, 8900, "scheduler listen port");
 
 int main(int argc, char** argv) {
 
@@ -35,12 +35,12 @@ int main(int argc, char** argv) {
   // make glog to log to stderr
   FLAGS_logtostderr = 1;
 
-  auto labor = std::make_unique<distributed::labor::Labor>(FLAGS_scheduler_ip, FLAGS_scheduler_port);
-  if(!labor || !labor->init()) {
+  auto labor = std::make_unique<distributed::labor::Labor>(
+    FLAGS_scheduler_ip, FLAGS_scheduler_port);
+  if (!labor || !labor->init()) {
     LOG(ERROR) << "create or initialize labor failed.";
     return EXIT_FAILURE;
   }
-
 
   return 0;
 }

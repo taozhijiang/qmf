@@ -43,10 +43,9 @@ struct WALSConfig {
 
 class WALSEngine : public Engine {
  public:
-  explicit WALSEngine(
-    const WALSConfig& config,
-    const std::unique_ptr<MetricsEngine>& metricsEngine,
-    const size_t nthreads = 16);
+  explicit WALSEngine(const WALSConfig& config,
+                      const std::unique_ptr<MetricsEngine>& metricsEngine,
+                      const size_t nthreads = 16);
 
   void init(const std::vector<DatasetElem>& dataset) override;
 
@@ -102,6 +101,16 @@ class WALSEngine : public Engine {
                                     const Double alpha,
                                     const Double lambda);
 
+  static Double
+    updateFactorsForOne(Double* result,
+                        const size_t n,
+                        const Matrix& Y,
+                        const IdIndex& rightIndex,
+                        const SignalGroup& signalGroup, /* signal_id & value */
+                        Matrix A,                       /*YtY copy*/
+                        const Double alpha,
+                        const Double lambda);
+
   const WALSConfig& config_;
 
   const std::unique_ptr<MetricsEngine>& metricsEngine_;
@@ -131,4 +140,4 @@ class WALSEngine : public Engine {
   FRIEND_TEST(WALSEngine, computeXtX);
   FRIEND_TEST(WALSEngine, updateFactorsForOne);
 };
-}
+} // namespace qmf
