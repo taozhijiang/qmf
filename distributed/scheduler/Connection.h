@@ -17,6 +17,8 @@
 #include <distributed/common/Common.h>
 #include <distributed/common/Message.h>
 
+#include <glog/logging.h>
+
 namespace distributed {
 namespace scheduler {
 
@@ -33,6 +35,7 @@ struct Select {
   void add_fd(int socketfd) {
     maxfd_ = socketfd > maxfd_ ? socketfd : maxfd_;
     FD_SET(socketfd, &readfds_);
+    VLOG(3) << "add fd " << socketfd << ", maxfd " << maxfd_;
   }
 
   void del_fd(int socketfd) {
@@ -40,11 +43,16 @@ struct Select {
     FD_CLR(socketfd, &readfds_);
 
     int n = 0;
-    for (size_t i = 0; i < maxfd_; ++i) {
+    for (size_t i = 0; i <= maxfd_; ++i) {
       if (FD_ISSET(i, &readfds_) && i > n)
         n = i;
+
+      if (FD_ISSET(i, &readfds_)) {
+        VLOG(3) << "current active: " << i;
+      }
     }
     maxfd_ = n;
+    VLOG(3) << "del fd " << socketfd << ", maxfd " << maxfd_;
   }
 
   int listenfd_ = 0;
@@ -53,6 +61,8 @@ struct Select {
 };
 
 class Connection {
+
+  friend class Scheduler;
 
  public:
   Connection(Scheduler& scheduler,
@@ -95,7 +105,12 @@ class Connection {
   const int socket_;
 
  private:
+  
+  // 因为submit工具的socket也在这里，所以这里区分是否是Labor
+  // 免得Scheduler误发数据
+  bool is_labor_ = false;
   LaborStatus status_;
+  
 
   enum class Stage {
     kHead = 1, // 读取头阶段
@@ -104,11 +119,11 @@ class Connection {
   } stage_;
 
   Head head_;
-  int head_idx_;
+  int head_idx_ = 0;
 
   // use vector try to reuse mem
   std::vector<char> data_;
-  int data_idx_;
+  int data_idx_ = 0;
 };
 
 } // end namespace scheduler

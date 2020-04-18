@@ -58,6 +58,11 @@ int main(int argc, char** argv) {
   ::signal(SIGINT, ::signal_handler);
   ::signal(SIGCHLD, SIG_IGN);
 
+  // GLOG_v=1,2,3
+  VLOG(1) << "1111";
+  VLOG(2) << "2222";
+  VLOG(3) << "3333";
+
   scheduler = std::make_unique<distributed::scheduler::Scheduler>(
     FLAGS_scheduler_ip, FLAGS_scheduler_port);
   if (!scheduler || !scheduler->init()) {

@@ -23,7 +23,8 @@
 namespace qmf {
 
 DatasetReader::DatasetReader(const std::string& fileName)
-  : stream_(std::make_unique<std::ifstream>(fileName)) {}
+  : stream_(std::make_unique<std::ifstream>(fileName)) {
+}
 
 bool DatasetReader::readOne(DatasetElem& elem) {
   CHECK(stream_);
@@ -33,8 +34,8 @@ bool DatasetReader::readOne(DatasetElem& elem) {
   double value = 0.0;
 
   // 输出无所谓，但是对于double scanf必须是%lf
-  const int result = sscanf(line_.c_str(), "%lld %lld %lf", &elem.userId,
-      &elem.itemId, &value);
+  const int result =
+    sscanf(line_.c_str(), "%lld %lld %lf", &elem.userId, &elem.itemId, &value);
   CHECK_EQ(result, 3) << "the file format is incorrect: " << line_;
   elem.value = static_cast<Double>(value);
   return true;
@@ -48,4 +49,13 @@ std::vector<DatasetElem> DatasetReader::readAll() {
   }
   return dataset;
 }
+
+void DatasetReader::readAll(std::vector<DatasetElem>& dataset) {
+  dataset.clear();
+  DatasetElem elem;
+  while (readOne(elem)) {
+    dataset.push_back(elem);
+  }
 }
+
+} // namespace qmf

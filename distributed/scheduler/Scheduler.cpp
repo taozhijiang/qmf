@@ -13,11 +13,14 @@
 
 #include <chrono> // std::chrono::seconds
 
+#include <distributed/common/SendOps.h>
+
 #include <glog/logging.h>
 
 namespace distributed {
 namespace scheduler {
 
+// tcp backlog size
 static const size_t kBacklog = 10;
 
 bool Scheduler::start_listen() {
@@ -89,8 +92,10 @@ void Scheduler::select_loop() {
     tv.tv_sec = 1;
     tv.tv_usec = 0;
 
+    size_t maxfd = select_ptr_->maxfd_;
     fd_set rfds = select_ptr_->readfds_;
     int retval = ::select(select_ptr_->maxfd_ + 1, &rfds, NULL, NULL, &tv);
+
     if (retval < 0) {
       LOG(ERROR) << "select error, critical problem: " << strerror(errno);
 
@@ -101,6 +106,7 @@ void Scheduler::select_loop() {
     } else if (retval == 0) {
 
       // LOG(INFO) << "select timeout";
+      VLOG(3) << "select timeout";
 
     } else {
 
@@ -139,6 +145,7 @@ void Scheduler::select_loop() {
           continue;
         }
 
+        VLOG(3) << "normal socket event :" << s;
         handle_read(s);
 
       } // end for
@@ -152,7 +159,7 @@ void Scheduler::handle_read(int socket) {
 
   auto iter = connections_ptr_.find(socket);
   if (iter == connections_ptr_.end()) {
-    LOG(ERROR) << "socket now found in connections.";
+    LOG(ERROR) << "socket not found in connections.";
     select_ptr_->del_fd(socket);
     return;
   }
@@ -168,6 +175,88 @@ void Scheduler::handle_read(int socket) {
   }
 }
 
+bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
+
+  // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
+  if (connections_ptr_.empty()) {
+    LOG(ERROR) << "no labor available now.";
+    return false;
+  }
+
+  for (auto iter = connections_ptr_.begin(); iter != connections_ptr_.end();
+       ++iter) {
+
+    auto connection = iter->second;
+    if (!connection->is_labor_)
+      continue;
+
+    connection->status_ = LaborStatus::kAttach;
+    const char* dat =
+      reinterpret_cast<const char*>(bigdata_ptr_->rating_vec_.data());
+    uint64_t len =
+      sizeof(bigdata_ptr_->rating_vec_[0]) * bigdata_ptr_->rating_vec_.size();
+    bool retval = SendOps::send_bulk(connection->socket_, OpCode::kPushRate,
+                                     bigdata_ptr_->task_id(),
+                                     bigdata_ptr_->epcho_id(), dat, len);
+
+    if (!retval) {
+      LOG(ERROR) << "sending rating to " << connection->self() << " failed.";
+    } else {
+      LOG(INFO) << "sending to " << connection->self();
+    }
+  }
+
+  return true;
+}
+
+bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
+
+  // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
+  if (connections_ptr_.empty()) {
+    LOG(ERROR) << "no labor available now.";
+    return false;
+  }
+
+  for (auto iter = connections_ptr_.begin(); iter != connections_ptr_.end();
+       ++iter) {
+
+    auto connection = iter->second;
+    if (!connection->is_labor_)
+      continue;
+
+    // TODO: 后续补发Rate
+    if (connection->status_ == LaborStatus::kAttach) {
+      continue;
+    }
+
+    const char* dat = nullptr;
+    uint64_t len = 0;
+    if (bigdata_ptr_->epcho_id() % 2) {
+      const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
+      dat = reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
+      len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
+      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id() << " transform userFactors with size " << len;
+    } else {
+      const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
+      dat = reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
+      len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
+      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id() << " transform itemFactors with size " << len;
+    }
+
+    bool retval = SendOps::send_bulk(connection->socket_, OpCode::kPushFixed,
+                                     bigdata_ptr_->task_id(),
+                                     bigdata_ptr_->epcho_id(), dat, len);
+
+    if (!retval) {
+      LOG(ERROR) << "sending fixed to " << connection->self() << " failed.";
+    } else {
+      LOG(INFO) << "sending to " << connection->self();
+    }
+  }
+
+  return true;
+}
+
 void Scheduler::task_run() {
 
   LOG(INFO) << "start task loop thread ...";
@@ -175,13 +264,18 @@ void Scheduler::task_run() {
   while (!terminate_) {
 
     std::shared_ptr<TaskDef> task_instance{};
-    if (!task_queue_.POP(task_instance, 5000 /*5s*/) || !task_instance) {
-      LOG(INFO) << "to";
+    if (!task_queue_.POP(task_instance, 1000 /*1s*/) || !task_instance) {
+      // ---
       continue;
     }
 
-    //
-    LOG(INFO) << "handle ... " << task_instance->train_set();
+    if (RunOneTask(task_instance)) {
+      LOG(INFO) << "RunOneTask of " << task_instance->train_set()
+                << " successfully.";
+    } else {
+      LOG(ERROR) << "RunOneTask of " << task_instance->train_set()
+                 << " failed.";
+    }
   }
 
   LOG(INFO) << "terminate task loop thread ...";

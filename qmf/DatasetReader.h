@@ -30,7 +30,7 @@ struct DatasetElem {
   int64_t userId;
   int64_t itemId;
   Double value = 1.0;
-};
+} __attribute__((__packed__));
 
 class DatasetReader {
  public:
@@ -44,6 +44,7 @@ class DatasetReader {
 
   // reads entire file
   std::vector<DatasetElem> readAll();
+  void readAll(std::vector<DatasetElem>& dataset);
 
  private:
   std::unique_ptr<std::istream> stream_;

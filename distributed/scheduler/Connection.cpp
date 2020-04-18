@@ -55,6 +55,7 @@ bool Connection::event() {
       return false;
     }
 
+    VLOG(3) << "read head successful, transmit to  kBody: " << self();
     stage_ = Stage::kBody;
     return handle_head();
 
@@ -90,8 +91,8 @@ bool Connection::event() {
         return true;
       }
 
+      VLOG(3) << "read head successful, transmit to  kDone: " << self();
       stage_ = Stage::kDone;
-      data_idx_ = 0;
       return handle_body();
     }
 
@@ -137,9 +138,13 @@ bool Connection::handle_body() {
 
   case static_cast<int>(OpCode::kSubmitTask): {
 
+    std::string message = std::string(data_.data(), data_idx_);
+    VLOG(3) << "kSubmitTask recv with " << message;
+    is_labor_ = false;
+
     bool success = false;
     do {
-      std::string taskfile = std::string(data_.data(), data_.size());
+      std::string taskfile = std::string(data_.data(), data_idx_);
       int taskfd = ::open(taskfile.c_str(), O_RDONLY);
       if (taskfd < 0) {
         LOG(ERROR) << "read task file failed " << taskfile;
@@ -147,14 +152,14 @@ bool Connection::handle_body() {
       }
 
       auto task = std::make_shared<TaskDef>();
-      if(!task) {
+      if (!task) {
         LOG(ERROR) << "create TaskDef failed.";
         break;
       }
 
       google::protobuf::io::FileInputStream finput(taskfd);
       finput.SetCloseOnDelete(true);
-      if(!google::protobuf::TextFormat::Parse(&finput, task.get())) {
+      if (!google::protobuf::TextFormat::Parse(&finput, task.get())) {
         LOG(ERROR) << "parse task file failed " << taskfile;
         break;
       }
@@ -167,23 +172,41 @@ bool Connection::handle_body() {
     } while (0);
 
     reset();
-    std::string message = success ? "OK" : "FA";
+
+    message = success ? "OK" : "FA";
     SendOps::send_message(socket_, OpCode::kSubmitTaskRsp, message);
     break;
   }
 
   case static_cast<int>(OpCode::kAttachLabor): {
-    LOG(INFO) << "recv attch with message: "
-              << std::string(data_.data(), data_.size());
+
+    std::string message = std::string(data_.data(), data_idx_);
+    VLOG(3) << "kAttachLabor recv with " << message;
+    is_labor_ = true;
+
     reset();
-    std::string message = "attach_labor_rsp_ok";
+    message = "attach_labor_rsp_ok";
     SendOps::send_message(socket_, OpCode::kAttachLaborRsp, message);
     break;
   }
 
-  case static_cast<int>(OpCode::kPushRateRsp):
+  case static_cast<int>(OpCode::kPushRateRsp): {
+
+    std::string message = std::string(data_.data(), data_idx_);
+    VLOG(3) << "kPushRateRsp recv with " << message;
+
+    if (message == "OK") {
+      LOG(INFO) << "kPushRateRsp return OK, update our status";
+      status_ = LaborStatus::kRateLoad;
+    }
+    reset();
+    break;
+  }
+
   case static_cast<int>(OpCode::kPushFixedRsp):
   case static_cast<int>(OpCode::kCalcRsp):
+    
+    
     LOG(INFO) << "NOT IMPLEMENTED... " << std::endl;
     reset();
     break;

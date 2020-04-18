@@ -16,19 +16,19 @@
 #include <string>
 
 #include <distributed/common/Message.h>
+#include <distributed/common/SendOps.h>
 #include <glog/logging.h>
 
 namespace distributed {
 
 class SendOps {
 
-public:
-
-  static bool send_lite(int socketfd, const char* buff, size_t len) {
+ public:
+  static bool send_lite(int socketfd, const char* buff, uint64_t len) {
     if (!buff)
       return false;
 
-    int sent = 0;
+    uint64_t sent = 0;
     while (sent < len) {
       int retval = ::write(socketfd, buff + sent, len - sent);
       if (retval < 0) {
@@ -36,9 +36,11 @@ public:
         return false;
       }
 
+      VLOG(3) << "this term sent " << sent << ", retval " << retval;
       sent += retval;
     }
 
+    VLOG(3) << "successful sent " << sent;
     return true;
   }
 
@@ -55,7 +57,23 @@ public:
            send_lite(socketfd, msg.c_str(), msg.size());
   }
 
+  static bool send_bulk(int socketfd,
+                        enum OpCode code,
+                        uint32_t task_id,
+                        uint32_t epcho_id,
+                        const char* buff,
+                        uint64_t len) {
 
+    Head head(code);
+    head.length = len;
+    head.task = task_id;
+    head.epcho = epcho_id;
+    head.to_net_endian();
+
+    return send_lite(
+             socketfd, reinterpret_cast<const char*>(&head), sizeof(Head)) &&
+           send_lite(socketfd, buff, len);
+  }
 };
 
 } // end namespace distributed

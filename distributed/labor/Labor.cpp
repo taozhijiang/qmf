@@ -98,7 +98,7 @@ bool Labor::start_attach() {
     return false;
   }
 
-  Head head {};
+  Head head{};
   bool critical = false;
   bool ret = false;
 
@@ -118,16 +118,15 @@ bool Labor::start_attach() {
     msg.resize(head.length);
     char* buff = msg.data();
     ret = RecvOps::recv_message(socketfd_, head, buff);
-    
-    if(ret) {
+
+    if (ret) {
       LOG(INFO) << "response: " << std::string(msg.data(), msg.size());
     }
-    
+
     break;
 
   } while (true);
 
-  
   return ret;
 }
 
@@ -137,12 +136,82 @@ void Labor::loop() {
 
   while (!terminate_) {
 
-    // Terminate ??
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    continue;
+    bool critical = false;
+
+    // 自带socket超时机制
+    bool retval = RecvOps::try_recv_head(socketfd_, &head_, &critical);
+    if (critical) {
+      LOG(ERROR) << "recv head failed.";
+      break;
+    }
+
+    // empty recv, retry again
+    if (!retval) {
+      LOG(INFO) << "empty recv.";
+      continue;
+    }
+
+    retval = handle_head();
+    if (!retval) {
+      LOG(ERROR) << "labor handle head failed: " << head_.dump();
+      break;
+    }
   }
 
   LOG(INFO) << "terminate loop thread ...";
+}
+
+bool Labor::handle_head() {
+
+  bool retval = true;
+  switch (head_.opcode) {
+
+  case static_cast<int>(OpCode::kPushRate): {
+    int64_t item_sz = head_.length / sizeof(qmf::DatasetElem);
+    bigdata_ptr_->rating_vec_.resize(item_sz);
+    char* dat = reinterpret_cast<char*>(bigdata_ptr_->rating_vec_.data());
+    retval = RecvOps::recv_message(socketfd_, head_, dat);
+    if (!retval) {
+      LOG(ERROR) << "recv rating matrix failed.";
+      break;
+    }
+
+    // other ...
+    bigdata_ptr_->task_id_ = head_.task;
+    bigdata_ptr_->epcho_id_ = head_.epcho;
+
+    // response
+    std::string message = "OK";
+    retval = SendOps::send_message(socketfd_, OpCode::kPushRateRsp, message);
+    if (!retval) {
+      LOG(ERROR) << "send response failed.";
+    }
+
+    break;
+  }
+
+  case static_cast<int>(OpCode::kPushFixed):
+
+    break;
+
+  case static_cast<int>(OpCode::kCalc):
+    break;
+
+  case static_cast<int>(OpCode::kSubmitTaskRsp):
+  case static_cast<int>(OpCode::kAttachLaborRsp):
+  case static_cast<int>(OpCode::kSubmitTask):
+  case static_cast<int>(OpCode::kAttachLabor):
+  case static_cast<int>(OpCode::kPushRateRsp):
+  case static_cast<int>(OpCode::kPushFixedRsp):
+  case static_cast<int>(OpCode::kCalcRsp):
+  default:
+    LOG(ERROR) << "invalid OpCode received from scheduler:"
+               << static_cast<int>(head_.opcode);
+    retval = false;
+    break;
+  }
+
+  return retval;
 }
 
 } // end namespace labor

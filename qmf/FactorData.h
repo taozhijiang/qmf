@@ -129,6 +129,6 @@ class FactorData {
   const bool withBiases_;
 
   Matrix factors_;
-  Vector biases_;
+  Vector biases_; // current not consider
 };
 }

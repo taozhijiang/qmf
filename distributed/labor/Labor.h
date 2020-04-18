@@ -39,6 +39,8 @@ class Labor {
   bool start_connect();
   bool start_attach();
 
+  bool handle_head();
+
   bool terminate_ = false;
 
   Head head_;

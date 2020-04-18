@@ -58,6 +58,10 @@ class Scheduler {
  private:
   void handle_read(int socket);
 
+  // 数据推送
+  bool push_all_rating(const std::shared_ptr<TaskDef>& taskdef);
+  bool push_all_fixed(const std::shared_ptr<TaskDef>& taskdef);
+
   std::unique_ptr<Select> select_ptr_;
 
   // 保留所有客户端的连接
@@ -73,6 +77,7 @@ class Scheduler {
   EQueue<std::shared_ptr<TaskDef>> task_queue_;
   std::thread task_thread_;
   void task_run();
+  bool RunOneTask(const std::shared_ptr<TaskDef>& taskdef);
 
   std::unique_ptr<BigData> bigdata_ptr_;
 };

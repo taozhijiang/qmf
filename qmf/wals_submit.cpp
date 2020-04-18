@@ -56,16 +56,16 @@ static bool send_task(int socketfd, const std::string& task) {
   const int expected_sz = distributed::kHeadSize + 2; // OK
   ::memset(buff, 0, expected_sz + 1);
 
-  int recv = 0;
-  while (recv < expected_sz) {
-    int retval = ::read(socketfd, buff + recv, expected_sz - recv);
+  int recved = 0;
+  while (recved < expected_sz) {
+    int retval = ::read(socketfd, buff + recved, expected_sz - recved);
     if (retval < 0) {
       std::cerr << "[ERROR] recv failed: " << strerror(errno) << std::endl;
       ::free(buff);
       return false;
     }
 
-    recv += retval;
+    recved += retval;
   }
 
   distributed::Head r_head;

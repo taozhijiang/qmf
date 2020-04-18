@@ -31,17 +31,19 @@ class RecvOps {
 
     char* ptr = reinterpret_cast<char*>(head);
     int recv = 0;
-    while (recv < sizeof(Head)) {
-      int retval = ::read(socketfd, ptr + recv, sizeof(Head) - recv);
+    while (recv < kHeadSize) {
+      int retval = ::read(socketfd, ptr + recv, kHeadSize - recv);
       if (retval < 0) {
         // recv 超时
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
 
           // 对于已经接收了部分数据的，等待剩余数据
-          if (recv > 0)
+          if (recv > 0) {
             continue;
+          }
 
           // 什么都每收到，not critical
+          VLOG(3) << "recv timeout, and no previous recv: " << recv;
           return false;
 
         } else {
@@ -52,6 +54,7 @@ class RecvOps {
         }
       }
 
+      VLOG(3) << "this term recv: " << recv << ", retval " << retval;
       recv += retval;
     }
 
@@ -84,8 +87,10 @@ class RecvOps {
       }
 
       recv += retval;
+      VLOG(3) << "this term recv: " << recv << ", retval " << retval;
     }
 
+    VLOG(3) << "successful recved " << recv;
     return true;
   }
 };
