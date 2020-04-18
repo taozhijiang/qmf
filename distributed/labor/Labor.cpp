@@ -35,6 +35,12 @@ bool Labor::init() {
     return false;
   }
 
+  engine_ptr_ = std::make_unique<qmf::WALSEngineLite>(bigdata_ptr_);
+  if (!engine_ptr_) {
+    LOG(ERROR) << "create WALSEngineLite failed.";
+    return false;
+  }
+
   return true;
 }
 
@@ -185,6 +191,9 @@ bool Labor::handle_head() {
     bigdata_ptr_->nfactors_ = head_.nfactors;
     bigdata_ptr_->lambda_ = head_.lambda;
     bigdata_ptr_->confidence_ = head_.confidence;
+
+    // build index ...
+    engine_ptr_->init();
 
     // response
     std::string message = "OK";

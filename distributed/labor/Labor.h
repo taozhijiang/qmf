@@ -11,6 +11,8 @@
 #include <cstdint>
 #include <string>
 
+#include <qmf/wals/WALSEngineLite.h>
+
 #include <distributed/common/BigData.h>
 #include <distributed/common/Common.h>
 #include <distributed/common/Message.h>
@@ -47,6 +49,7 @@ class Labor {
   int head_idx_;
 
   std::unique_ptr<BigData> bigdata_ptr_;
+  std::unique_ptr<qmf::WALSEngineLite> engine_ptr_;
 };
 
 } // end namespace labor

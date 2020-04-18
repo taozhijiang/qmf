@@ -50,6 +50,11 @@ class IdIndex {
     return ids_;
   }
 
+  void reset() {
+    ids_.clear();
+    idxMap_.clear();
+  }
+
  private:
   std::vector<int64_t> ids_;
 

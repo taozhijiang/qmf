@@ -14,6 +14,8 @@
 #include <thread>
 #include <map>
 
+#include <qmf/wals/WALSEngineLite.h>
+
 #include <distributed/scheduler/Connection.h>
 #include <distributed/proto/task.pb.h>
 
@@ -28,8 +30,8 @@ namespace scheduler {
 class Scheduler {
 
  public:
-  using connections_ptr_type =
-    std::shared_ptr<std::map<int, std::shared_ptr<Connection>>>;
+  using connections_type = std::map<int, std::shared_ptr<Connection>>;
+  using connections_ptr_type = std::shared_ptr<connections_type>;
 
  public:
   Scheduler(const std::string& addr, int32_t port) : addr_(addr), port_(port) {
@@ -40,8 +42,7 @@ class Scheduler {
     if (!start_listen())
       return false;
 
-    connections_ptr_ =
-      std::make_shared<std::map<int, std::shared_ptr<Connection>>>();
+    connections_ptr_ = std::make_shared<connections_type>();
     if (!connections_ptr_) {
       LOG(ERROR) << "create Connections failed.";
       return false;
@@ -50,6 +51,12 @@ class Scheduler {
     bigdata_ptr_ = std::make_unique<BigData>();
     if (!bigdata_ptr_) {
       LOG(ERROR) << "create BigData failed.";
+      return false;
+    }
+
+    engine_ptr_ = std::make_unique<qmf::WALSEngineLite>(bigdata_ptr_);
+    if (!engine_ptr_) {
+      LOG(ERROR) << "create WALSEngineLite failed.";
       return false;
     }
 
@@ -96,6 +103,7 @@ class Scheduler {
   bool RunOneTask(const std::shared_ptr<TaskDef>& taskdef);
 
   std::unique_ptr<BigData> bigdata_ptr_;
+  std::unique_ptr<qmf::WALSEngineLite> engine_ptr_;
 };
 
 } // end namespace scheduler

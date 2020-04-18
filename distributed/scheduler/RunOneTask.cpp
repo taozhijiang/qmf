@@ -53,21 +53,15 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   LOG(INFO) << "load training datset size: "
             << bigdata_ptr_->rating_vec_.size();
 
-  std::set<int64_t> user_set;
-  std::set<int64_t> item_set;
-  for (const auto& elem : bigdata_ptr_->rating_vec_) {
-    user_set.insert(elem.userId);
-    item_set.insert(elem.itemId);
-  }
-
-  LOG(INFO) << "detected item count: " << item_set.size();
-  LOG(INFO) << "detected user count: " << user_set.size();
+  engine_ptr_->init();
+  LOG(INFO) << "detected item count: " << engine_ptr_->nitems();
+  LOG(INFO) << "detected user count: " << engine_ptr_->nusers();
 
   // step 2. 初始化uniform
-  bigdata_ptr_->item_factor_ptr_ =
-    std::make_shared<qmf::FactorData>(item_set.size(), taskdef->nfactors());
-  bigdata_ptr_->user_factor_ptr_ =
-    std::make_shared<qmf::FactorData>(user_set.size(), taskdef->nfactors());
+  bigdata_ptr_->item_factor_ptr_ = std::make_shared<qmf::FactorData>(
+    engine_ptr_->nitems(), taskdef->nfactors());
+  bigdata_ptr_->user_factor_ptr_ = std::make_shared<qmf::FactorData>(
+    engine_ptr_->nusers(), taskdef->nfactors());
 
   if (taskdef->distribution_file().empty()) {
 
@@ -140,6 +134,9 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   }
 
   // step 5. 保存
+  LOG(INFO) << "saving user_factors and item_factors ";
+  engine_ptr_->saveUserFactors(taskdef->user_factors());
+  engine_ptr_->saveItemFactors(taskdef->item_factors());
 
   return true;
 }

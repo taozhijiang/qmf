@@ -170,7 +170,7 @@ Double WALSEngine::iterate(FactorData& leftData,
   Matrix YtY(X.ncols(), X.ncols());
   computeXtX(Y, &YtY);
 
-#if 1
+#if 0
 
   // omp_set_num_threads(16);
 
