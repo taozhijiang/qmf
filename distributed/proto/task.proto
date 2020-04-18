@@ -1,0 +1,17 @@
+syntax = "proto2";
+package distributed;
+
+
+message TaskDef {
+
+    optional uint64 nepochs = 1 [ default = 10];
+    optional uint64 nfactors = 2 [ default = 30];
+    
+    optional double regularization_lambda = 3 [ default = 0.05];
+    optional double confidence_weight = 4 [ default = 40];
+
+    optional double init_distribution_bound = 5 [ default = 0.01];
+    optional string distribution_file = 6 [ default = "" ];
+
+    required string train_set = 7;
+}

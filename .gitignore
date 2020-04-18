@@ -12,3 +12,6 @@
 
 # Compiled Static libraries
 *.a
+
+*.pb.h
+*.pb.cc

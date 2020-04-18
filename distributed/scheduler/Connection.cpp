@@ -6,7 +6,15 @@
  *
  */
 
+#include <fcntl.h>
+
 #include <distributed/scheduler/Connection.h>
+#include <distributed/scheduler/Scheduler.h>
+
+#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/text_format.h>
+#include <distributed/proto/task.pb.h>
+
 #include <distributed/common/SendOps.h>
 
 #include <glog/logging.h>
@@ -127,10 +135,42 @@ bool Connection::handle_body() {
   bool retval = true;
   switch (head_.opcode) {
 
-  case static_cast<int>(OpCode::kSubmitTask):
-    LOG(INFO) << "NOT IMPLEMENTED... " << std::endl;
+  case static_cast<int>(OpCode::kSubmitTask): {
+
+    bool success = false;
+    do {
+      std::string taskfile = std::string(data_.data(), data_.size());
+      int taskfd = ::open(taskfile.c_str(), O_RDONLY);
+      if (taskfd < 0) {
+        LOG(ERROR) << "read task file failed " << taskfile;
+        break;
+      }
+
+      auto task = std::make_shared<TaskDef>();
+      if(!task) {
+        LOG(ERROR) << "create TaskDef failed.";
+        break;
+      }
+
+      google::protobuf::io::FileInputStream finput(taskfd);
+      finput.SetCloseOnDelete(true);
+      if(!google::protobuf::TextFormat::Parse(&finput, task.get())) {
+        LOG(ERROR) << "parse task file failed " << taskfile;
+        break;
+      }
+
+      scheduler_.add_task(task);
+      success = true;
+
+      LOG(INFO) << "add new task successfully: " << taskfile;
+
+    } while (0);
+
     reset();
+    std::string message = success ? "OK" : "FA";
+    SendOps::send_message(socket_, OpCode::kSubmitTaskRsp, message);
     break;
+  }
 
   case static_cast<int>(OpCode::kAttachLabor): {
     LOG(INFO) << "recv attch with message: "

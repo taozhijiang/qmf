@@ -93,12 +93,11 @@ struct Head {
   uint64_t length; // playload length ( NOT include header)
 
   std::string dump() const {
-    char msg[64]{};
+    char msg[256]{};
     ::snprintf(msg, sizeof(msg),
                "mgc:%0x, ver:%0x, opcode:%0x, task:%0x, epcho: %0x, nfactors: "
-               "%0x, lambda: %lf, confidence: %lf, len:%lu",
-               magic, version, opcode, task, epcho, nfactors, lambda,
-               confidence, length);
+               "%0x, len:%lu",
+               magic, version, opcode, task, epcho, nfactors, length);
     return msg;
   }
 
@@ -133,6 +132,8 @@ struct Head {
   }
 
 } __attribute__((__packed__));
+
+static const size_t kHeadSize = sizeof(Head);
 
 } // end namespace distributed
 

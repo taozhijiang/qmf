@@ -15,12 +15,16 @@
 #include <map>
 
 #include <distributed/scheduler/Connection.h>
+#include <distributed/proto/task.pb.h>
+
+#include <distributed/common/EQueue.h>
 #include <distributed/common/BigData.h>
 
 #include <glog/logging.h>
 
 namespace distributed {
 namespace scheduler {
+
 
 class Scheduler {
 
@@ -47,6 +51,10 @@ class Scheduler {
     terminate_ = true;
   }
 
+  void add_task(const std::shared_ptr<TaskDef>& task) {
+    task_queue_.PUSH(task);
+  }
+
  private:
   void handle_read(int socket);
 
@@ -61,6 +69,10 @@ class Scheduler {
   const std::string addr_;
   const int32_t port_;
   bool start_listen();
+
+  EQueue<std::shared_ptr<TaskDef>> task_queue_;
+  std::thread task_thread_;
+  void task_run();
 
   std::unique_ptr<BigData> bigdata_ptr_;
 };

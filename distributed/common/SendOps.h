@@ -30,7 +30,7 @@ public:
 
     int sent = 0;
     while (sent < len) {
-      int retval = ::write(socketfd, buff, len);
+      int retval = ::write(socketfd, buff + sent, len - sent);
       if (retval < 0) {
         LOG(ERROR) << "write/send error: " << strerror(errno);
         return false;
@@ -55,7 +55,7 @@ public:
            send_lite(socketfd, msg.c_str(), msg.size());
   }
 
-  
+
 };
 
 } // end namespace distributed

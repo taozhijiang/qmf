@@ -60,6 +60,9 @@ bool Scheduler::start_listen() {
       break;
     }
 
+    // start up task thread
+    task_thread_ = std::thread(std::bind(&Scheduler::task_run, this));
+
     success = true;
 
   } while (0);
@@ -122,7 +125,8 @@ void Scheduler::select_loop() {
             int port = htons(peer_addr.sin_port);
             LOG(INFO) << "accept new client from " << addr << ":" << port;
 
-            auto connection = std::make_shared<Connection>(addr, port, sock);
+            auto connection =
+              std::make_shared<Connection>(*this, addr, port, sock);
             if (connection) {
               connections_ptr_[sock] = connection;
               select_ptr_->add_fd(sock);
@@ -162,6 +166,25 @@ void Scheduler::handle_read(int socket) {
               << "remote address: " << connection->addr_ << ":"
               << connection->port_;
   }
+}
+
+void Scheduler::task_run() {
+
+  LOG(INFO) << "start task loop thread ...";
+
+  while (!terminate_) {
+
+    std::shared_ptr<TaskDef> task_instance{};
+    if (!task_queue_.POP(task_instance, 5000 /*5s*/) || !task_instance) {
+      LOG(INFO) << "to";
+      continue;
+    }
+
+    //
+    LOG(INFO) << "handle ... " << task_instance->train_set();
+  }
+
+  LOG(INFO) << "terminate task loop thread ...";
 }
 
 } // end namespace scheduler

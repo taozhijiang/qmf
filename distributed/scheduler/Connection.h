@@ -20,6 +20,8 @@
 namespace distributed {
 namespace scheduler {
 
+class Scheduler;
+
 struct Select {
 
   Select(int socket) : listenfd_(socket) {
@@ -53,8 +55,11 @@ struct Select {
 class Connection {
 
  public:
-  Connection(const std::string& addr, int port, int socket)
-    : addr_(addr), port_(port), socket_(socket) {
+  Connection(Scheduler& scheduler,
+             const std::string& addr,
+             int port,
+             int socket)
+    : scheduler_(scheduler), addr_(addr), port_(port), socket_(socket) {
 
     // first initial status
     status_ = LaborStatus::kAttach;
@@ -82,6 +87,9 @@ class Connection {
   }
 
  public:
+  // back pointer
+  Scheduler& scheduler_;
+
   const std::string addr_;
   const int port_;
   const int socket_;
