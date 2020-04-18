@@ -33,7 +33,7 @@ bool DatasetReader::readOne(DatasetElem& elem) {
   double value = 0.0;
 
   // 输出无所谓，但是对于double scanf必须是%lf
-  const int result = sscanf(line_.c_str(), "%ld %ld %lf", &elem.userId,
+  const int result = sscanf(line_.c_str(), "%lld %lld %lf", &elem.userId,
       &elem.itemId, &value);
   CHECK_EQ(result, 3) << "the file format is incorrect: " << line_;
   elem.value = static_cast<Double>(value);

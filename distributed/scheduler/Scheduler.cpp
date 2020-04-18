@@ -25,7 +25,7 @@ bool Scheduler::start_listen() {
   int socketfd = ::socket(AF_INET, SOCK_STREAM, 0);
   if (socketfd < 0) {
     LOG(ERROR) << "create socket error: " << ::strerror(errno);
-    return -1;
+    return false;
   }
 
   bool success = false;
@@ -42,7 +42,7 @@ bool Scheduler::start_listen() {
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(static_cast<short>(port_));
-    addr.sin_addr.s_addr = inet_addr(ip_.c_str());
+    addr.sin_addr.s_addr = inet_addr(addr_.c_str());
 
     if (::bind(socketfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
       LOG(ERROR) << "bind error: " << ::strerror(errno);
@@ -60,14 +60,6 @@ bool Scheduler::start_listen() {
       break;
     }
 
-    // start loop thread
-    select_thread_ptr_ =
-      std::make_unique<std::thread>(&Scheduler::select_loop_run, this);
-    if (!select_thread_ptr_) {
-      LOG(ERROR) << "create select thread failed.";
-      break;
-    }
-
     success = true;
 
   } while (0);
@@ -77,21 +69,21 @@ bool Scheduler::start_listen() {
     return false;
   }
 
-  LOG(INFO) << "scheduler listen to " << ip_ << ":" << port_
+  LOG(INFO) << "scheduler listen to " << addr_ << ":" << port_
             << " successfully!";
   return true;
 }
 
-void Scheduler::select_loop_run() {
+void Scheduler::select_loop() {
 
-  LOG(INFO) << "start select loop thread run.";
+  LOG(INFO) << "start select loop thread ...";
 
   struct timeval tv;
 
   while (!terminate_) {
 
-    // every 5 second wake up
-    tv.tv_sec = 5;
+    // every second wake up
+    tv.tv_sec = 1;
     tv.tv_usec = 0;
 
     fd_set rfds = select_ptr_->readfds_;
@@ -149,7 +141,7 @@ void Scheduler::select_loop_run() {
     }
   }
 
-  LOG(INFO) << "terminate select loop thread run.";
+  LOG(INFO) << "terminate select loop thread ...";
 }
 
 void Scheduler::handle_read(int socket) {

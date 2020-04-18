@@ -28,6 +28,24 @@
 DEFINE_string(scheduler_ip, "0.0.0.0", "scheduler ip address");
 DEFINE_int32(scheduler_port, 8900, "scheduler listen port");
 
+std::unique_ptr<distributed::scheduler::Scheduler> scheduler;
+
+static void signal_handler(int signal) {
+  switch (signal) {
+
+  case SIGUSR1:
+  case SIGINT:
+    scheduler->terminate();
+    LOG(INFO) << "termiating system.";
+    ::sleep(5);
+    break;
+
+  default:
+    LOG(ERROR) << "signal not processed: " << signal;
+    break;
+  }
+}
+
 int main(int argc, char** argv) {
 
   gflags::SetUsageMessage("wals_scheduler");
@@ -36,16 +54,18 @@ int main(int argc, char** argv) {
   // make glog to log to stderr
   FLAGS_logtostderr = 1;
 
-  auto scheduler = std::make_unique<distributed::scheduler::Scheduler>(
+  ::signal(SIGUSR1, ::signal_handler);
+  ::signal(SIGINT, ::signal_handler);
+  ::signal(SIGCHLD, SIG_IGN);
+
+  scheduler = std::make_unique<distributed::scheduler::Scheduler>(
     FLAGS_scheduler_ip, FLAGS_scheduler_port);
   if (!scheduler || !scheduler->init()) {
     LOG(ERROR) << "create or initialize scheduler failed.";
     return EXIT_FAILURE;
   }
 
-  while(true) {
-    ::sleep(1);
-  }
+  scheduler->select_loop();
 
   return 0;
 }

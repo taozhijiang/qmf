@@ -59,24 +59,46 @@ enum class OpCode : uint8_t {
   kCalc = 9,
   kCalcRsp = 10,
 
+  kUnspecified = 100,
 };
 
 struct Head {
 
+  Head()
+    : magic(kHeaderMagic),
+      version(kHeaderVersion),
+      opcode(static_cast<uint8_t>(OpCode::kUnspecified)),
+      length(0) {
+  }
+
+  explicit Head(enum OpCode code)
+    : magic(kHeaderMagic),
+      version(kHeaderVersion),
+      opcode(static_cast<uint8_t>(code)),
+      length(0) {
+  }
+
   uint16_t magic;  // "MF"
   uint8_t version; // 1
   uint8_t opcode;  // 当前消息类型
-  uint32_t task;   // 任务ID
-  uint16_t epcho;  // epcho迭代ID
-  uint16_t status; // 对于某些不需要具体内容的通信，这里使用响应码表示成功
+
+  uint32_t task;  // 任务ID
+  uint32_t epcho; // epcho迭代ID
+
+  // 为了高效传输，数据已经不能保证架构无关的了 ...
+  uint64_t nfactors;
+  double lambda;     // regulation lambda
+  double confidence; // confidence weight
+
   uint64_t length; // playload length ( NOT include header)
 
   std::string dump() const {
     char msg[64]{};
-    ::snprintf(
-      msg, sizeof(msg),
-      "mgc:%0x, ver:%0x, opcode:%0x, task:%0x, epcho: %0x, status:%0x, len:%lu",
-      magic, version, opcode, task, epcho, status, length);
+    ::snprintf(msg, sizeof(msg),
+               "mgc:%0x, ver:%0x, opcode:%0x, task:%0x, epcho: %0x, nfactors: "
+               "%0x, lambda: %lf, confidence: %lf, len:%lu",
+               magic, version, opcode, task, epcho, nfactors, lambda,
+               confidence, length);
     return msg;
   }
 
@@ -86,8 +108,10 @@ struct Head {
     version = version;
     opcode = opcode;
     task = be32toh(task);
-    epcho = be16toh(epcho);
-    status = be16toh(status);
+    epcho = be32toh(epcho);
+    nfactors = be64toh(nfactors);
+    lambda = lambda;
+    confidence = confidence;
     length = be64toh(length);
   }
 
@@ -96,9 +120,16 @@ struct Head {
     version = version;
     opcode = opcode;
     task = htobe32(task);
-    epcho = htobe16(epcho);
-    status = htobe16(status);
+    epcho = htobe32(epcho);
+    nfactors = htobe64(nfactors);
+    lambda = lambda;
+    confidence = confidence;
     length = htobe64(length);
+  }
+
+  bool validate() const {
+    return magic == kHeaderMagic && version == kHeaderVersion && length > 0 &&
+           opcode != static_cast<uint8_t>(OpCode::kUnspecified);
   }
 
 } __attribute__((__packed__));

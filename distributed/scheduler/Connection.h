@@ -65,12 +65,9 @@ class Connection {
 
   // critical error return false;
   bool event();
+
   bool handle_head();
   bool handle_body();
-
-  const std::string addr_;
-  const int port_;
-  const int socket_;
 
   std::string self() const {
     std::stringstream ss;
@@ -81,16 +78,23 @@ class Connection {
   void reset() {
     head_idx_ = 0;
     data_idx_ = 0;
+    stage_ = Stage::kHead;
   }
+
+ public:
+  const std::string addr_;
+  const int port_;
+  const int socket_;
 
  private:
   LaborStatus status_;
 
   enum class Stage {
-    kHead = 1,
-    kBody = 2,
+    kHead = 1, // 读取头阶段
+    kBody = 2, // 读取Body阶段
+    kDone = 3, // 等待处理数据
   } stage_;
-  
+
   Head head_;
   int head_idx_;
 

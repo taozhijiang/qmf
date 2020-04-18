@@ -27,6 +27,26 @@
 DEFINE_string(scheduler_ip, "127.0.0.1", "scheduler ip address");
 DEFINE_int32(scheduler_port, 8900, "scheduler listen port");
 
+
+std::unique_ptr<distributed::labor::Labor> labor;
+
+static void signal_handler(int signal) {
+  switch (signal) {
+
+  case SIGUSR1:
+  case SIGINT:
+    labor->terminate();
+    LOG(INFO) << "termiating system.";
+    ::sleep(5);
+    break;
+
+  default:
+    LOG(ERROR) << "signal not processed: " << signal;
+    break;
+  }
+}
+
+
 int main(int argc, char** argv) {
 
   gflags::SetUsageMessage("wals_worker");
@@ -35,12 +55,18 @@ int main(int argc, char** argv) {
   // make glog to log to stderr
   FLAGS_logtostderr = 1;
 
-  auto labor = std::make_unique<distributed::labor::Labor>(
+  ::signal(SIGUSR1, ::signal_handler);
+  ::signal(SIGINT, ::signal_handler);
+  ::signal(SIGCHLD, SIG_IGN);
+
+  labor = std::make_unique<distributed::labor::Labor>(
     FLAGS_scheduler_ip, FLAGS_scheduler_port);
   if (!labor || !labor->init()) {
     LOG(ERROR) << "create or initialize labor failed.";
     return EXIT_FAILURE;
   }
+
+  labor->loop();
 
   return 0;
 }

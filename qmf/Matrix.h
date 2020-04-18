@@ -26,6 +26,8 @@ namespace qmf {
 // class for a row-wise matrix
 class Matrix {
  public:
+  using value_type = Double;
+
   Matrix(const size_t nrows, const size_t ncols);
 
   // default copy
@@ -80,7 +82,8 @@ class Matrix {
 };
 
 // solves a system of linear equations, A * x = b.
-// matrix A should symmetric and vector b should have the same number of rows as A.
+// matrix A should symmetric and vector b should have the same number of rows as
+// A.
 Vector linearSymmetricSolve(Matrix A, Vector b);
 
-}
+} // namespace qmf
