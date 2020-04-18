@@ -59,15 +59,22 @@ class SendOps {
 
   static bool send_bulk(int socketfd,
                         enum OpCode code,
-                        uint32_t task_id,
-                        uint32_t epcho_id,
                         const char* buff,
-                        uint64_t len) {
+                        uint64_t len,
+                        uint32_t task_id = 0,
+                        uint32_t epcho_id = 0,
+                        uint64_t nfactors = 0,
+                        double lambda = 0,
+                        double confidence = 0) {
 
     Head head(code);
+
     head.length = len;
     head.task = task_id;
     head.epcho = epcho_id;
+    head.nfactors = nfactors;
+    head.lambda = lambda;
+    head.confidence = confidence;
     head.to_net_endian();
 
     return send_lite(

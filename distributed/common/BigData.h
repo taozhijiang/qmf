@@ -35,7 +35,7 @@ struct BigData {
   }
 
   uint32_t incr_epcho() {
-    return ++ epcho_id_;
+    return ++epcho_id_;
   }
 
   // 用户评价矩阵
@@ -48,13 +48,20 @@ struct BigData {
   std::shared_ptr<qmf::FactorData> user_factor_ptr_;
 
   // reset for new task
-  void start_term() {
+  void start_term(uint64_t nfractors, double lambda, double confidence) {
     ++task_id_;
     epcho_id_ = 0;
+    nfactors_ = nfractors;
+    lambda_ = lambda;
+    confidence_ = confidence;
   }
 
   uint32_t task_id_;  // 任务ID
   uint32_t epcho_id_; // epcho迭代ID
+
+  uint64_t nfactors_;
+  double lambda_;     // regulation lambda
+  double confidence_; // confidence weight
 };
 
 } // end namespace distributed

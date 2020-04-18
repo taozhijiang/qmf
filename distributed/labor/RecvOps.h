@@ -52,6 +52,12 @@ class RecvOps {
           *critical = true;
           return false;
         }
+
+      } else if (retval == 0) {
+
+        LOG(ERROR) << "peer close down: " << socketfd;
+        *critical = true;
+        return false;
       }
 
       VLOG(3) << "this term recv: " << recv << ", retval " << retval;
@@ -83,6 +89,11 @@ class RecvOps {
           continue;
 
         LOG(ERROR) << "read error: " << strerror(errno);
+        return false;
+
+      } else if (retval == 0) {
+
+        LOG(ERROR) << "peer close down: " << socketfd;
         return false;
       }
 

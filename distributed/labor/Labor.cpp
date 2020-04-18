@@ -167,22 +167,29 @@ bool Labor::handle_head() {
   switch (head_.opcode) {
 
   case static_cast<int>(OpCode::kPushRate): {
+
+    VLOG(3) << head_.dump();
+
     int64_t item_sz = head_.length / sizeof(qmf::DatasetElem);
     bigdata_ptr_->rating_vec_.resize(item_sz);
     char* dat = reinterpret_cast<char*>(bigdata_ptr_->rating_vec_.data());
+
     retval = RecvOps::recv_message(socketfd_, head_, dat);
     if (!retval) {
       LOG(ERROR) << "recv rating matrix failed.";
       break;
     }
 
-    // other ...
     bigdata_ptr_->task_id_ = head_.task;
     bigdata_ptr_->epcho_id_ = head_.epcho;
+    bigdata_ptr_->nfactors_ = head_.nfactors;
+    bigdata_ptr_->lambda_ = head_.lambda;
+    bigdata_ptr_->confidence_ = head_.confidence;
 
     // response
     std::string message = "OK";
-    retval = SendOps::send_message(socketfd_, OpCode::kPushRateRsp, message);
+    retval = SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp,
+                                message.c_str(), 2, head_.task, head_.epcho);
     if (!retval) {
       LOG(ERROR) << "send response failed.";
     }
@@ -190,9 +197,56 @@ bool Labor::handle_head() {
     break;
   }
 
-  case static_cast<int>(OpCode::kPushFixed):
+  case static_cast<int>(OpCode::kPushFixed): {
+
+    int64_t item_sz = head_.length / (head_.nfactors * sizeof(qmf::Double));
+
+    VLOG(3) << head_.dump();
+    VLOG(3) << "detected factors item/user size: " << item_sz;
+
+    // epcho_id_ = 1, 3, 5, ... fix item, cal user
+    // epcho_id_ = 2, 4, 6, ... fix user, cal item
+
+    char* dat = nullptr;
+    if (head_.epcho % 2) {
+
+      bigdata_ptr_->item_factor_ptr_ =
+        std::make_shared<qmf::FactorData>(item_sz, head_.nfactors);
+      bigdata_ptr_->item_factor_ptr_->setFactors();
+      const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
+      dat = reinterpret_cast<char*>(const_cast<qmf::Matrix&>(matrix).data());
+
+    } else {
+
+      bigdata_ptr_->user_factor_ptr_ =
+        std::make_shared<qmf::FactorData>(item_sz, head_.nfactors);
+      bigdata_ptr_->user_factor_ptr_->setFactors();
+      const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
+      dat = reinterpret_cast<char*>(const_cast<qmf::Matrix&>(matrix).data());
+    }
+
+    retval = RecvOps::recv_message(socketfd_, head_, dat);
+    if (!retval) {
+      LOG(ERROR) << "recv rating matrix failed.";
+      break;
+    }
+
+    bigdata_ptr_->task_id_ = head_.task;
+    bigdata_ptr_->epcho_id_ = head_.epcho;
+    bigdata_ptr_->nfactors_ = head_.nfactors;
+    bigdata_ptr_->lambda_ = head_.lambda;
+    bigdata_ptr_->confidence_ = head_.confidence;
+
+    // response
+    std::string message = "OK";
+    retval = SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp,
+                                message.c_str(), 2, head_.task, head_.epcho);
+    if (!retval) {
+      LOG(ERROR) << "send response failed.";
+    }
 
     break;
+  }
 
   case static_cast<int>(OpCode::kCalc):
     break;

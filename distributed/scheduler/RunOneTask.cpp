@@ -37,7 +37,9 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
 
   LOG(INFO) << task_def_dump(taskdef);
 
-  bigdata_ptr_->start_term();
+  bigdata_ptr_->start_term(taskdef->nfactors(),
+                           taskdef->regularization_lambda(),
+                           taskdef->confidence_weight());
 
   // step 1. 加载train_set数据
 
@@ -86,40 +88,55 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   }
 
   // step 3. push rating 给所有的labor
+
+  const size_t kStartConnectionCount = connections_count();
+  LOG(INFO) << "current active labor: " << kStartConnectionCount;
+
   if (!push_all_rating(taskdef)) {
     LOG(ERROR) << "scheduler push rating matrix to all labor failed.";
     return false;
   }
 
-  // 检查是否有labor的状态为kRateLoad了
-  ::sleep(10);
+  size_t rate_count = 0;
+  while ((rate_count = connections_count(LaborStatus::kRateLoad, taskdef)) <
+         kStartConnectionCount) {
 
-  uint32_t rateload = 0;
-  for (auto iter = connections_ptr_.begin(); iter != connections_ptr_.end();
-       ++iter) {
-    auto connection = iter->second;
-    if (connection->status_ == LaborStatus::kRateLoad)
-      ++rateload;
+    LOG(INFO) << "waiting ... current rateload labor count " << rate_count
+              << ", expect " << kStartConnectionCount;
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
-
-  if (rateload == 0) {
-    LOG(ERROR) << "no available kRateLoad labor found!";
-    return false;
-  }
-  LOG(INFO) << "current available labor: " << rateload;
 
   // step 4. 执行迭代
+  size_t fixed_count = 0;
   for (size_t i = 0; i < taskdef->nepochs(); ++i) {
 
     bigdata_ptr_->incr_epcho();
     push_all_fixed(taskdef);
 
-    ::sleep(5);
+    // waiting all FixedLoad
+    while ((fixed_count = connections_count(LaborStatus::kFixedLoad, taskdef)) <
+           kStartConnectionCount) {
+
+      LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
+                << ", expect " << kStartConnectionCount;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // calc
 
     bigdata_ptr_->incr_epcho();
     push_all_fixed(taskdef);
 
-    ::sleep(5);
+    // waiting all FixedLoad
+    while ((fixed_count = connections_count(LaborStatus::kFixedLoad, taskdef)) <
+           kStartConnectionCount) {
+
+      LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
+                << ", expect " << kStartConnectionCount;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
+    // calc
   }
 
   // step 5. 保存

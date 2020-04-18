@@ -61,6 +61,15 @@ class FactorData {
     }
   }
 
+  // zero pad
+  void setFactors() {
+    for (size_t idx = 0; idx < nelems(); ++idx) {
+      for (size_t fidx = 0; fidx < nfactors(); ++fidx) {
+        factors_(idx, fidx) = 0;
+      }
+    }
+  }
+
   // 从具体的文件初始化
   void setFactors(const std::string& fileName) {
 
@@ -71,7 +80,7 @@ class FactorData {
     int count = 0;
     for (size_t idx = 0; idx < nelems(); ++idx) {
       for (size_t fidx = 0; fidx < nfactors(); ++fidx) {
-        
+
         if (!std::getline(fin, line)) {
           LOG(ERROR) << "read uniform data from " << fileName << " failed.";
           return;
@@ -80,9 +89,9 @@ class FactorData {
         const int result = sscanf(line.c_str(), "%lf", &value);
         CHECK_EQ(result, 1) << "the file format is incorrect: " << line;
         factors_(idx, fidx) = value;
-        count ++;
+        count++;
 
-        if(count < 10) 
+        if (count < 10)
           LOG(INFO) << "sample: " << value;
       }
     }
@@ -131,4 +140,4 @@ class FactorData {
   Matrix factors_;
   Vector biases_; // current not consider
 };
-}
+} // namespace qmf

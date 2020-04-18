@@ -25,8 +25,11 @@
 namespace distributed {
 namespace scheduler {
 
-
 class Scheduler {
+
+ public:
+  using connections_ptr_type =
+    std::shared_ptr<std::map<int, std::shared_ptr<Connection>>>;
 
  public:
   Scheduler(const std::string& addr, int32_t port) : addr_(addr), port_(port) {
@@ -36,6 +39,13 @@ class Scheduler {
 
     if (!start_listen())
       return false;
+
+    connections_ptr_ =
+      std::make_shared<std::map<int, std::shared_ptr<Connection>>>();
+    if (!connections_ptr_) {
+      LOG(ERROR) << "create Connections failed.";
+      return false;
+    }
 
     bigdata_ptr_ = std::make_unique<BigData>();
     if (!bigdata_ptr_) {
@@ -61,13 +71,19 @@ class Scheduler {
   // 数据推送
   bool push_all_rating(const std::shared_ptr<TaskDef>& taskdef);
   bool push_all_fixed(const std::shared_ptr<TaskDef>& taskdef);
+  size_t connections_count();
+  size_t connections_count(enum LaborStatus status,
+                           const std::shared_ptr<TaskDef>& taskdef);
 
   std::unique_ptr<Select> select_ptr_;
 
   // 保留所有客户端的连接
-  std::map<int, std::shared_ptr<Connection>> connections_ptr_;
+  // 每次任务执行的开始，使用一个快照；更新的时候也是使用智能指针保护
 
  private:
+  std::mutex connections_mutex_;
+  connections_ptr_type connections_ptr_;
+
   bool terminate_ = false;
 
   const std::string addr_;

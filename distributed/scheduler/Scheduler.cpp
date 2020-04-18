@@ -110,12 +110,12 @@ void Scheduler::select_loop() {
 
     } else {
 
-      for (int s = 0; s <= select_ptr_->maxfd_; ++s) {
+      for (int ss = 0; ss <= select_ptr_->maxfd_; ++ss) {
 
-        if (!FD_ISSET(s, &rfds))
+        if (!FD_ISSET(ss, &rfds))
           continue;
 
-        if (s == select_ptr_->listenfd_) {
+        if (ss == select_ptr_->listenfd_) {
 
           // handle new client
 
@@ -124,7 +124,9 @@ void Scheduler::select_loop() {
           int sock =
             ::accept(select_ptr_->listenfd_, (struct sockaddr*)&peer_addr, &sz);
           if (sock == -1) {
+
             LOG(ERROR) << "accept new client failed: " << strerror(errno);
+
           } else {
 
             std::string addr = inet_ntoa(peer_addr.sin_addr);
@@ -134,7 +136,12 @@ void Scheduler::select_loop() {
             auto connection =
               std::make_shared<Connection>(*this, addr, port, sock);
             if (connection) {
-              connections_ptr_[sock] = connection;
+
+              {
+                const std::lock_guard<std::mutex> lock(connections_mutex_);
+                (*connections_ptr_)[sock] = connection;
+              }
+
               select_ptr_->add_fd(sock);
               LOG(INFO) << "add new Connection successfully.";
             } else {
@@ -145,8 +152,8 @@ void Scheduler::select_loop() {
           continue;
         }
 
-        VLOG(3) << "normal socket event :" << s;
-        handle_read(s);
+        VLOG(3) << "normal socket event :" << ss;
+        handle_read(ss);
 
       } // end for
     }
@@ -157,8 +164,14 @@ void Scheduler::select_loop() {
 
 void Scheduler::handle_read(int socket) {
 
-  auto iter = connections_ptr_.find(socket);
-  if (iter == connections_ptr_.end()) {
+  connections_ptr_type copy_connections_ptr{};
+  {
+    const std::lock_guard<std::mutex> lock(connections_mutex_);
+    copy_connections_ptr = connections_ptr_;
+  }
+
+  auto iter = copy_connections_ptr->find(socket);
+  if (iter == copy_connections_ptr->end()) {
     LOG(ERROR) << "socket not found in connections.";
     select_ptr_->del_fd(socket);
     return;
@@ -166,8 +179,15 @@ void Scheduler::handle_read(int socket) {
 
   auto connection = iter->second;
   if (!connection->event()) {
+
+    // not select anymore
     select_ptr_->del_fd(socket);
-    connections_ptr_.erase(socket);
+
+    {
+      const std::lock_guard<std::mutex> lock(connections_mutex_);
+      connections_ptr_->erase(socket);
+    }
+
     LOG(INFO) << "critical error, destroy the connection: " << socket
               << std::endl
               << "remote address: " << connection->addr_ << ":"
@@ -177,14 +197,19 @@ void Scheduler::handle_read(int socket) {
 
 bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
 
+  connections_ptr_type connections{};
+  {
+    const std::lock_guard<std::mutex> lock(connections_mutex_);
+    connections = connections_ptr_;
+  }
+
   // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
-  if (connections_ptr_.empty()) {
+  if (connections->empty()) {
     LOG(ERROR) << "no labor available now.";
     return false;
   }
 
-  for (auto iter = connections_ptr_.begin(); iter != connections_ptr_.end();
-       ++iter) {
+  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
 
     auto connection = iter->second;
     if (!connection->is_labor_)
@@ -195,9 +220,9 @@ bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
       reinterpret_cast<const char*>(bigdata_ptr_->rating_vec_.data());
     uint64_t len =
       sizeof(bigdata_ptr_->rating_vec_[0]) * bigdata_ptr_->rating_vec_.size();
-    bool retval = SendOps::send_bulk(connection->socket_, OpCode::kPushRate,
-                                     bigdata_ptr_->task_id(),
-                                     bigdata_ptr_->epcho_id(), dat, len);
+    bool retval =
+      SendOps::send_bulk(connection->socket_, OpCode::kPushRate, dat, len,
+                         bigdata_ptr_->task_id(), bigdata_ptr_->epcho_id());
 
     if (!retval) {
       LOG(ERROR) << "sending rating to " << connection->self() << " failed.";
@@ -211,14 +236,19 @@ bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
 
 bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
 
+  connections_ptr_type connections{};
+  {
+    const std::lock_guard<std::mutex> lock(connections_mutex_);
+    connections = connections_ptr_;
+  }
+
   // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
-  if (connections_ptr_.empty()) {
+  if (connections->empty()) {
     LOG(ERROR) << "no labor available now.";
     return false;
   }
 
-  for (auto iter = connections_ptr_.begin(); iter != connections_ptr_.end();
-       ++iter) {
+  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
 
     auto connection = iter->second;
     if (!connection->is_labor_)
@@ -229,23 +259,31 @@ bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
       continue;
     }
 
+    // epcho_id_ = 1, 3, 5, ... fix item, cal user
+    // epcho_id_ = 2, 4, 6, ... fix user, cal item
+
     const char* dat = nullptr;
     uint64_t len = 0;
     if (bigdata_ptr_->epcho_id() % 2) {
-      const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
-      dat = reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
+      const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
+      dat =
+        reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id() << " transform userFactors with size " << len;
+      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id()
+                << " transform itemFactors with size " << len;
     } else {
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
-      dat = reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
+      dat =
+        reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id() << " transform itemFactors with size " << len;
+      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id()
+                << " transform userFactors with size " << len;
     }
 
-    bool retval = SendOps::send_bulk(connection->socket_, OpCode::kPushFixed,
-                                     bigdata_ptr_->task_id(),
-                                     bigdata_ptr_->epcho_id(), dat, len);
+    bool retval =
+      SendOps::send_bulk(connection->socket_, OpCode::kPushFixed, dat, len,
+                         bigdata_ptr_->task_id(), bigdata_ptr_->epcho_id(),
+                         bigdata_ptr_->nfactors_);
 
     if (!retval) {
       LOG(ERROR) << "sending fixed to " << connection->self() << " failed.";
@@ -255,6 +293,53 @@ bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
   }
 
   return true;
+}
+
+size_t Scheduler::connections_count() {
+  connections_ptr_type connections{};
+  {
+    const std::lock_guard<std::mutex> lock(connections_mutex_);
+    connections = connections_ptr_;
+  }
+
+  size_t count = 0;
+  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
+
+    auto connection = iter->second;
+    if (!connection->is_labor_)
+      continue;
+
+    ++count;
+  }
+
+  return count;
+}
+
+size_t Scheduler::connections_count(enum LaborStatus status,
+                                    const std::shared_ptr<TaskDef>& taskdef) {
+
+  connections_ptr_type connections{};
+  {
+    const std::lock_guard<std::mutex> lock(connections_mutex_);
+    connections = connections_ptr_;
+  }
+
+  size_t count = 0;
+
+  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
+
+    auto connection = iter->second;
+    if (!connection->is_labor_)
+      continue;
+
+    if (connection->status_ == status &&
+        connection->task_id_ == bigdata_ptr_->task_id() &&
+        connection->epcho_id_ == bigdata_ptr_->epcho_id()) {
+      ++count;
+    }
+  }
+
+  return count;
 }
 
 void Scheduler::task_run() {

@@ -198,15 +198,29 @@ bool Connection::handle_body() {
     if (message == "OK") {
       LOG(INFO) << "kPushRateRsp return OK, update our status";
       status_ = LaborStatus::kRateLoad;
+      task_id_ = head_.task;
+      epcho_id_ = head_.epcho;
     }
     reset();
     break;
   }
 
-  case static_cast<int>(OpCode::kPushFixedRsp):
+  case static_cast<int>(OpCode::kPushFixedRsp): {
+    std::string message = std::string(data_.data(), data_idx_);
+    VLOG(3) << "kPushFixedRsp recv with " << message;
+
+    if (message == "OK") {
+      LOG(INFO) << "kPushRateRsp return OK, update our status";
+      status_ = LaborStatus::kFixedLoad;
+      task_id_ = head_.task;
+      epcho_id_ = head_.epcho;
+    }
+    reset();
+    break;
+  }
+
   case static_cast<int>(OpCode::kCalcRsp):
-    
-    
+
     LOG(INFO) << "NOT IMPLEMENTED... " << std::endl;
     reset();
     break;

@@ -110,8 +110,9 @@ class Connection {
   // 免得Scheduler误发数据
   bool is_labor_ = false;
   LaborStatus status_;
+  uint32_t task_id_ = 0;
+  uint32_t epcho_id_ = 0;
   
-
   enum class Stage {
     kHead = 1, // 读取头阶段
     kBody = 2, // 读取Body阶段

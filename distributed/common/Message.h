@@ -96,7 +96,7 @@ struct Head {
     char msg[256]{};
     ::snprintf(msg, sizeof(msg),
                "mgc:%0x, ver:%0x, opcode:%0x, task:%0x, epcho: %0x, nfactors: "
-               "%0x, len:%lu",
+               "%0x, len: %lu",
                magic, version, opcode, task, epcho, nfactors, length);
     return msg;
   }
