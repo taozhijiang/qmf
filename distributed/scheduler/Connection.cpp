@@ -197,9 +197,8 @@ bool Connection::handle_body() {
 
     if (message == "OK") {
       LOG(INFO) << "kPushRateRsp return OK, update our status";
-      status_ = LaborStatus::kRateLoad;
-      task_id_ = head_.task;
-      epcho_id_ = head_.epcho;
+      task_id_ = head_.taskid;
+      epcho_id_ = head_.epchoid;
     }
     reset();
     break;
@@ -211,9 +210,8 @@ bool Connection::handle_body() {
 
     if (message == "OK") {
       LOG(INFO) << "kPushRateRsp return OK, update our status";
-      status_ = LaborStatus::kFixedLoad;
-      task_id_ = head_.task;
-      epcho_id_ = head_.epcho;
+      task_id_ = head_.taskid;
+      epcho_id_ = head_.epchoid;
     }
     reset();
     break;

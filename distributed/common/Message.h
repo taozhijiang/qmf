@@ -82,11 +82,14 @@ struct Head {
   uint8_t version; // 1
   uint8_t opcode;  // 当前消息类型
 
-  uint32_t task;  // 任务ID
-  uint32_t epcho; // epcho迭代ID
+  uint32_t taskid;  // 任务ID
+  uint32_t epchoid; // epcho迭代ID
 
   // 为了高效传输，数据已经不能保证架构无关的了 ...
-  uint64_t nfactors;
+
+  uint32_t bucket; // Calc时候计算对应的分片
+  uint32_t nfactors;
+
   double lambda;     // regulation lambda
   double confidence; // confidence weight
 
@@ -94,10 +97,11 @@ struct Head {
 
   std::string dump() const {
     char msg[256]{};
-    ::snprintf(msg, sizeof(msg),
-               "mgc:%0x, ver:%0x, opcode:%0x, task:%0x, epcho: %0x, nfactors: "
-               "%0x, len: %lu",
-               magic, version, opcode, task, epcho, nfactors, length);
+    ::snprintf(
+      msg, sizeof(msg),
+      "magic:%0x, version:%0x, opcode:%0x, taskid:%0x, epchoid: %0x, bucket: "
+      "%0x, nfactors: %0x, len: %lu",
+      magic, version, opcode, taskid, epchoid, bucket, nfactors, length);
     return msg;
   }
 
@@ -106,9 +110,10 @@ struct Head {
     magic = be16toh(magic);
     version = version;
     opcode = opcode;
-    task = be32toh(task);
-    epcho = be32toh(epcho);
-    nfactors = be64toh(nfactors);
+    taskid = be32toh(taskid);
+    epchoid = be32toh(epchoid);
+    bucket = be32toh(bucket);
+    nfactors = be32toh(nfactors);
     lambda = lambda;
     confidence = confidence;
     length = be64toh(length);
@@ -118,9 +123,10 @@ struct Head {
     magic = htobe16(magic);
     version = version;
     opcode = opcode;
-    task = htobe32(task);
-    epcho = htobe32(epcho);
-    nfactors = htobe64(nfactors);
+    taskid = htobe32(taskid);
+    epchoid = htobe32(epchoid);
+    bucket = htobe32(bucket);
+    nfactors = htobe32(nfactors);
     lambda = lambda;
     confidence = confidence;
     length = htobe64(length);

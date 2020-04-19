@@ -28,6 +28,8 @@ std::string task_def_dump(const std::shared_ptr<TaskDef>& taskdef) {
      << std::endl
      << "\tdistribution_file: " << taskdef->distribution_file() << std::endl
      << "\ttrain_set: " << taskdef->train_set() << std::endl
+     << "\tuser_factors: " << taskdef->user_factors() << std::endl
+     << "\titem_factors: " << taskdef->item_factors() << std::endl
      << "------    end    ------" << std::endl;
 
   return ss.str();
@@ -92,8 +94,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   }
 
   size_t rate_count = 0;
-  while ((rate_count = connections_count(LaborStatus::kRateLoad, taskdef)) <
-         kStartConnectionCount) {
+  while ((rate_count = connections_count(true)) < kStartConnectionCount) {
 
     LOG(INFO) << "waiting ... current rateload labor count " << rate_count
               << ", expect " << kStartConnectionCount;
@@ -104,12 +105,11 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   size_t fixed_count = 0;
   for (size_t i = 0; i < taskdef->nepochs(); ++i) {
 
-    bigdata_ptr_->incr_epcho();
+    bigdata_ptr_->incr_epchoid();
     push_all_fixed(taskdef);
 
     // waiting all FixedLoad
-    while ((fixed_count = connections_count(LaborStatus::kFixedLoad, taskdef)) <
-           kStartConnectionCount) {
+    while ((fixed_count = connections_count(true)) < kStartConnectionCount) {
 
       LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
                 << ", expect " << kStartConnectionCount;
@@ -118,12 +118,11 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
 
     // calc
 
-    bigdata_ptr_->incr_epcho();
+    bigdata_ptr_->incr_epchoid();
     push_all_fixed(taskdef);
 
     // waiting all FixedLoad
-    while ((fixed_count = connections_count(LaborStatus::kFixedLoad, taskdef)) <
-           kStartConnectionCount) {
+    while ((fixed_count = connections_count(true)) < kStartConnectionCount) {
 
       LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
                 << ", expect " << kStartConnectionCount;

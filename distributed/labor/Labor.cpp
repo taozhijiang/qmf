@@ -174,6 +174,8 @@ bool Labor::handle_head() {
 
   case static_cast<int>(OpCode::kPushRate): {
 
+    // 无论何时，Labor收到kPushRate都直接更新本地数据
+
     VLOG(3) << head_.dump();
 
     int64_t item_sz = head_.length / sizeof(qmf::DatasetElem);
@@ -186,20 +188,15 @@ bool Labor::handle_head() {
       break;
     }
 
-    bigdata_ptr_->task_id_ = head_.task;
-    bigdata_ptr_->epcho_id_ = head_.epcho;
-    bigdata_ptr_->nfactors_ = head_.nfactors;
-    bigdata_ptr_->lambda_ = head_.lambda;
-    bigdata_ptr_->confidence_ = head_.confidence;
+    bigdata_ptr_->set_param(head_);
 
     // build index ...
     engine_ptr_->init();
 
     // response
     std::string message = "OK";
-    retval = SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp,
-                                message.c_str(), 2, head_.task, head_.epcho);
-    if (!retval) {
+    if (!SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp, message.c_str(), 2,
+                            head_.taskid, head_.epchoid)) {
       LOG(ERROR) << "send response failed.";
     }
 
@@ -207,6 +204,13 @@ bool Labor::handle_head() {
   }
 
   case static_cast<int>(OpCode::kPushFixed): {
+
+    // 只有之前的taskid一致，才可以接受kPushFixed
+    if (head_.taskid != bigdata_ptr_->taskid()) {
+      LOG(ERROR) << "taskid mismatch, local " << bigdata_ptr_->taskid()
+                 << ", but recv " << head_.taskid;
+      break;
+    }
 
     int64_t item_sz = head_.length / (head_.nfactors * sizeof(qmf::Double));
 
@@ -217,7 +221,7 @@ bool Labor::handle_head() {
     // epcho_id_ = 2, 4, 6, ... fix user, cal item
 
     char* dat = nullptr;
-    if (head_.epcho % 2) {
+    if (head_.epchoid % 2) {
 
       bigdata_ptr_->item_factor_ptr_ =
         std::make_shared<qmf::FactorData>(item_sz, head_.nfactors);
@@ -240,17 +244,12 @@ bool Labor::handle_head() {
       break;
     }
 
-    bigdata_ptr_->task_id_ = head_.task;
-    bigdata_ptr_->epcho_id_ = head_.epcho;
-    bigdata_ptr_->nfactors_ = head_.nfactors;
-    bigdata_ptr_->lambda_ = head_.lambda;
-    bigdata_ptr_->confidence_ = head_.confidence;
+    bigdata_ptr_->set_param(head_);
 
     // response
     std::string message = "OK";
-    retval = SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp,
-                                message.c_str(), 2, head_.task, head_.epcho);
-    if (!retval) {
+    if (!SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp, message.c_str(),
+                            2, head_.taskid, head_.epchoid)) {
       LOG(ERROR) << "send response failed.";
     }
 

@@ -78,9 +78,10 @@ class Scheduler {
   // 数据推送
   bool push_all_rating(const std::shared_ptr<TaskDef>& taskdef);
   bool push_all_fixed(const std::shared_ptr<TaskDef>& taskdef);
-  size_t connections_count();
-  size_t connections_count(enum LaborStatus status,
-                           const std::shared_ptr<TaskDef>& taskdef);
+
+  // 只检查所有可用的labor数目
+  // check为true，则校验taskid和epcho相匹配的labor数目
+  size_t connections_count(bool check = false);
 
   std::unique_ptr<Select> select_ptr_;
 

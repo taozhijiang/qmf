@@ -16,26 +16,47 @@
 #include <qmf/Matrix.h>
 #include <qmf/FactorData.h>
 
+#include <distributed/common/Message.h>
+
 namespace distributed {
 
 // 每一个任务、每一轮迭代的时候都需要更新
 struct BigData {
 
   BigData() {
-    ::srandom(::time(NULL));
-    task_id_ = ::random() & 0xFFFF;
+
+    // ::srandom(::time(NULL));
+    // taskid_ = ::random() & 0xFFFF;
+
+    taskid_ = epchoid_ = 0;
   }
 
-  uint32_t task_id() const {
-    return task_id_;
+  uint32_t taskid() const {
+    return taskid_;
   }
 
-  uint32_t epcho_id() const {
-    return epcho_id_;
+  uint32_t epchoid() const {
+    return epchoid_;
   }
 
-  uint32_t incr_epcho() {
-    return ++epcho_id_;
+  uint32_t nfactors() const {
+    return nfactors_;
+  }
+
+  double lambda() const {
+    return lambda_;
+  }
+
+  double confidence() const {
+    return confidence_;
+  }
+
+  uint32_t incr_epchoid() {
+    return ++epchoid_;
+  }
+
+  void set_epchoid(uint32_t epchoid) {
+    epchoid_ = epchoid;
   }
 
   // 用户评价矩阵
@@ -48,18 +69,33 @@ struct BigData {
   std::shared_ptr<qmf::FactorData> user_factor_ptr_;
 
   // reset for new task
-  void start_term(uint64_t nfractors, double lambda, double confidence) {
-    ++task_id_;
-    epcho_id_ = 0;
-    nfactors_ = nfractors;
+  // called from scheduler
+  void start_term(uint32_t nfactors, double lambda, double confidence) {
+
+    ++taskid_;
+
+    epchoid_ = 0;
+    nfactors_ = nfactors;
     lambda_ = lambda;
     confidence_ = confidence;
   }
 
-  uint32_t task_id_;  // 任务ID
-  uint32_t epcho_id_; // epcho迭代ID
+  // called from labor
+  void set_param(const Head& head) {
+    taskid_ = head.taskid;
+    epchoid_ = head.epchoid;
+    nfactors_ = head.nfactors;
+    lambda_ = head.lambda;
+    confidence_ = head.confidence;
+  }
 
-  uint64_t nfactors_;
+ private:
+  // 因为这里涉及到和上面数据的一致性，所以还是私有化
+  // 只在特定的接口中修改
+  uint32_t taskid_;  // 任务ID
+  uint32_t epchoid_; // epcho迭代ID
+
+  uint32_t nfactors_;
   double lambda_;     // regulation lambda
   double confidence_; // confidence weight
 };

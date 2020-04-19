@@ -215,19 +215,14 @@ bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
     if (!connection->is_labor_)
       continue;
 
-    connection->status_ = LaborStatus::kAttach;
-    const char* dat =
-      reinterpret_cast<const char*>(bigdata_ptr_->rating_vec_.data());
-    uint64_t len =
-      sizeof(bigdata_ptr_->rating_vec_[0]) * bigdata_ptr_->rating_vec_.size();
-    bool retval =
-      SendOps::send_bulk(connection->socket_, OpCode::kPushRate, dat, len,
-                         bigdata_ptr_->task_id(), bigdata_ptr_->epcho_id());
+    const auto& dataset = bigdata_ptr_->rating_vec_;
 
-    if (!retval) {
+    const char* dat = reinterpret_cast<const char*>(dataset.data());
+    uint64_t len = sizeof(dataset[0]) * dataset.size();
+
+    if (!SendOps::send_bulk(connection->socket_, OpCode::kPushRate, dat, len,
+                            bigdata_ptr_->taskid(), bigdata_ptr_->epchoid())) {
       LOG(ERROR) << "sending rating to " << connection->self() << " failed.";
-    } else {
-      LOG(INFO) << "sending to " << connection->self();
     }
   }
 
@@ -254,69 +249,38 @@ bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
     if (!connection->is_labor_)
       continue;
 
-    // TODO: 后续补发Rate
-    if (connection->status_ == LaborStatus::kAttach) {
-      continue;
-    }
-
     // epcho_id_ = 1, 3, 5, ... fix item, cal user
     // epcho_id_ = 2, 4, 6, ... fix user, cal item
 
     const char* dat = nullptr;
     uint64_t len = 0;
-    if (bigdata_ptr_->epcho_id() % 2) {
+    if (bigdata_ptr_->epchoid() % 2) {
       const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id()
+      LOG(INFO) << "epcho_id " << bigdata_ptr_->epchoid()
                 << " transform itemFactors with size " << len;
     } else {
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "epcho_id " << bigdata_ptr_->epcho_id()
+      LOG(INFO) << "epcho_id " << bigdata_ptr_->epchoid()
                 << " transform userFactors with size " << len;
     }
 
-    bool retval =
-      SendOps::send_bulk(connection->socket_, OpCode::kPushFixed, dat, len,
-                         bigdata_ptr_->task_id(), bigdata_ptr_->epcho_id(),
-                         bigdata_ptr_->nfactors_);
-
-    if (!retval) {
+    if (!SendOps::send_bulk(connection->socket_, OpCode::kPushFixed, dat, len,
+                            bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
+                            bigdata_ptr_->nfactors())) {
       LOG(ERROR) << "sending fixed to " << connection->self() << " failed.";
-    } else {
-      LOG(INFO) << "sending to " << connection->self();
     }
   }
 
   return true;
 }
 
-size_t Scheduler::connections_count() {
-  connections_ptr_type connections{};
-  {
-    const std::lock_guard<std::mutex> lock(connections_mutex_);
-    connections = connections_ptr_;
-  }
-
-  size_t count = 0;
-  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
-
-    auto connection = iter->second;
-    if (!connection->is_labor_)
-      continue;
-
-    ++count;
-  }
-
-  return count;
-}
-
-size_t Scheduler::connections_count(enum LaborStatus status,
-                                    const std::shared_ptr<TaskDef>& taskdef) {
+size_t Scheduler::connections_count(bool check) {
 
   connections_ptr_type connections{};
   {
@@ -332,9 +296,10 @@ size_t Scheduler::connections_count(enum LaborStatus status,
     if (!connection->is_labor_)
       continue;
 
-    if (connection->status_ == status &&
-        connection->task_id_ == bigdata_ptr_->task_id() &&
-        connection->epcho_id_ == bigdata_ptr_->epcho_id()) {
+    if (!check) {
+      ++count;
+    } else if (connection->task_id_ == bigdata_ptr_->taskid() &&
+               connection->epcho_id_ == bigdata_ptr_->epchoid()) {
       ++count;
     }
   }

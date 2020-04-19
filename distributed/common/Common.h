@@ -13,14 +13,9 @@
 namespace distributed {
 
 
-
-enum class LaborStatus : uint8_t {
-
-  kAttach = 1,
-  kRateLoad = 2,
-  kFixedLoad = 3,
-
-};
+// 将所有计算按照下面的计数进行等分，每次计算请求只需要传递索引号就可以了
+const size_t kBucketSize = 10000;
+const size_t kBucketBits = 10000; //1亿的user/item维度，可以了吧
 
 } // end namespace distributed
 

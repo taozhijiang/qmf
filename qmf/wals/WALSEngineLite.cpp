@@ -169,8 +169,8 @@ Double WALSEngineLite::iterate(FactorData& leftData,
   const size_t count = leftSignals.size();
 
   Double loss = 0.0;
-  const auto alpha = bigdata_ptr_->confidence_;
-  const auto lambda = bigdata_ptr_->lambda_;
+  const auto alpha = bigdata_ptr_->confidence();
+  const auto lambda = bigdata_ptr_->lambda();
 
 #pragma omp parallel reduction(+ : loss)
   {

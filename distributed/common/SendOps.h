@@ -61,17 +61,17 @@ class SendOps {
                         enum OpCode code,
                         const char* buff,
                         uint64_t len,
-                        uint32_t task_id = 0,
-                        uint32_t epcho_id = 0,
-                        uint64_t nfactors = 0,
+                        uint32_t taskid = 0,
+                        uint32_t epchoid = 0,
+                        uint32_t nfactors = 0,
                         double lambda = 0,
                         double confidence = 0) {
 
     Head head(code);
 
     head.length = len;
-    head.task = task_id;
-    head.epcho = epcho_id;
+    head.taskid = taskid;
+    head.epchoid = epchoid;
     head.nfactors = nfactors;
     head.lambda = lambda;
     head.confidence = confidence;

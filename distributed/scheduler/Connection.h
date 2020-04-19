@@ -71,9 +71,6 @@ class Connection {
              int socket)
     : scheduler_(scheduler), addr_(addr), port_(port), socket_(socket) {
 
-    // first initial status
-    status_ = LaborStatus::kAttach;
-
     stage_ = Stage::kHead;
     head_idx_ = 0;
   }
@@ -109,7 +106,8 @@ class Connection {
   // 因为submit工具的socket也在这里，所以这里区分是否是Labor
   // 免得Scheduler误发数据
   bool is_labor_ = false;
-  LaborStatus status_;
+
+  // 废弃Status参数，使用 task_id 和 epcho_id 就能够唯一确定labor的状态了
   uint32_t task_id_ = 0;
   uint32_t epcho_id_ = 0;
   
