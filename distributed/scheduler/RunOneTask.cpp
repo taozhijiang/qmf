@@ -206,14 +206,9 @@ bool Scheduler::do_iterate_factors() {
         return true;
       }
     }
+    
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    // 如果最终的任务不多了，降低频率，防止重复分发
-    if (bucket_number - bigdata_ptr_->bucket_bits_.count() >
-        connections_count(true)) {
-      std::this_thread::sleep_for(std::chrono::seconds(5));
-    } else {
-      std::this_thread::sleep_for(std::chrono::seconds(10));
-    }
   }
 
   return true;

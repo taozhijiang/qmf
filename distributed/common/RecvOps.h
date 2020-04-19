@@ -34,7 +34,7 @@ class RecvOps {
     while (recv < kHeadSize) {
       int retval = ::read(socketfd, ptr + recv, kHeadSize - recv);
       if (retval < 0) {
-        // recv 超时
+        // read 超时
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
 
           // 对于已经接收了部分数据的，等待剩余数据
@@ -48,7 +48,7 @@ class RecvOps {
 
         } else {
 
-          LOG(ERROR) << "read error: " << strerror(errno);
+          LOG(ERROR) << "RecvOps read error: " << strerror(errno);
           *critical = true;
           return false;
         }
@@ -60,7 +60,7 @@ class RecvOps {
         return false;
       }
 
-      VLOG(3) << "this term recv: " << recv << ", retval " << retval;
+      VLOG(3) << "recv " << recv << ", retval " << retval;
       recv += retval;
     }
 
@@ -88,7 +88,7 @@ class RecvOps {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
           continue;
 
-        LOG(ERROR) << "read error: " << strerror(errno);
+        LOG(ERROR) << "RecvOps read error: " << strerror(errno);
         return false;
 
       } else if (retval == 0) {
@@ -98,10 +98,10 @@ class RecvOps {
       }
 
       recv += retval;
-      VLOG(3) << "this term recv: " << recv << ", retval " << retval;
+      VLOG(3) << "recv " << recv << ", retval " << retval;
     }
 
-    VLOG(3) << "successful recved " << recv;
+    VLOG(3) << "total recv " << recv;
     return true;
   }
 
@@ -115,8 +115,9 @@ class RecvOps {
     uint64_t recv = 0;
 
     while (recv < len) {
-    
-      int retval = ::read(socketfd, buff, std::min<uint64_t>(sizeof(buff), len - recv));
+
+      int retval =
+        ::read(socketfd, buff, std::min<uint64_t>(sizeof(buff), len - recv));
       if (retval < 0) {
 
         // recv 超时
@@ -133,12 +134,13 @@ class RecvOps {
       }
 
       recv += retval;
+      VLOG(3) << "recv " << recv << ", retval " << retval;
     }
 
+    VLOG(3) << "total recv " << recv;
     return true;
   }
 };
-
 
 } // end namespace distributed
 

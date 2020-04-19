@@ -109,6 +109,13 @@ struct Head {
     return msg;
   }
 
+  std::string stepinfo() const {
+    char msg[256]{};
+    ::snprintf(msg, sizeof(msg), "{taskid:%0x, epchoid:%0x, bucket:%0x}",
+               taskid, epchoid, bucket);
+    return msg;
+  }
+
   // 网络大端字节序
   void from_net_endian() {
     magic = be16toh(magic);

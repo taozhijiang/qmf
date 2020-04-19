@@ -156,13 +156,16 @@ Double WALSEngineLite::iterate(uint64_t start_index,
                                const FactorData& rightData,
                                const IdIndex& rightIndex) {
 
-  auto genZero = [](auto...) { return 0.0; };
-  leftData.setFactors(genZero);
+  // auto genZero = [](auto...) { return 0.0; };
+  // leftData.setFactors(genZero);
 
   Matrix& X = leftData.getFactors();
   const Matrix& Y = rightData.getFactors();
 
   // Matrix YtY = computeXtX(Y);
+
+  // ! create new YtY computs OK, but when using bigdata_ptr_->YtY_ptr_
+  // ! the result is error
   Matrix YtY(X.ncols(), X.ncols());
   computeXtX(Y, &YtY);
 

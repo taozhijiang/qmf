@@ -18,7 +18,8 @@ project(qmf)
 #find_package(OpenMP REQUIRED)
 
 # settings
-set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wuninitialized -fopenmp")
+#set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wuninitialized -fopenmp")
+set(CMAKE_CXX_FLAGS "-std=c++14 -O0 -g -Wall -Wextra -Wuninitialized")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin/")
 set(CMAKE_FILES_DIRECTORY "build/")
 
@@ -67,17 +68,29 @@ make_binary(wals.cpp wals)
 # distributed version 
 set(DISTRIBUTED_SOURCES
     ${PROJECT_SOURCE_DIR}/distributed/scheduler/Scheduler.cpp
+    ${PROJECT_SOURCE_DIR}/distributed/scheduler/Connection.cpp
+    ${PROJECT_SOURCE_DIR}/distributed/scheduler/RunOneTask.cpp
+
+    ${PROJECT_SOURCE_DIR}/distributed/labor/Labor.cpp
+
+    ${PROJECT_SOURCE_DIR}/distributed/proto/task.pb.cc
+
+    ${PROJECT_SOURCE_DIR}/qmf/wals/WALSEngineLite.cpp
 )
 add_library(distributed STATIC ${DISTRIBUTED_SOURCES})
 
 add_executable(wals_scheduler qmf/wals_scheduler.cpp)
-target_link_libraries(wals_scheduler distributed qmf pthread)
+target_link_libraries(wals_scheduler distributed qmf protobuf pthread)
 set_target_properties(wals_scheduler
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "bin/")
 
 add_executable(wals_labor qmf/wals_labor.cpp)
 target_link_libraries(wals_labor distributed qmf pthread)
 set_target_properties(wals_labor
+        PROPERTIES RUNTIME_OUTPUT_DIRECTORY "bin/")
+
+add_executable(wals_submit qmf/wals_submit.cpp)
+set_target_properties(wals_submit
         PROPERTIES RUNTIME_OUTPUT_DIRECTORY "bin/")
 
 # generate uniform random to dest file
@@ -92,16 +105,16 @@ macro(make_test test_source test_name)
     add_test(${test_name} test/${test_name})
 endmacro(make_test)
 
-enable_testing()
-make_test(BPREngineTest.cpp BPREngineTest)
-make_test(DatasetReaderTest.cpp DatasetReaderTest)
-make_test(EngineTest.cpp EngineTest)
-make_test(FactorDataTest.cpp FactorDataTest)
-make_test(MatrixTest.cpp MatrixTest)
-make_test(MetricsTest.cpp MetricsTest)
-make_test(MetricsManagerTest.cpp MetricsManagerTest)
-make_test(ParallelExecutorTest.cpp ParallelExecutorTest)
-make_test(ThreadPoolTest.cpp ThreadPoolTest)
-make_test(UtilTest.cpp UtilTest)
-make_test(VectorTest.cpp VectorTest)
-make_test(WALSEngineTest.cpp WALSEngineTest)
+# enable_testing()
+# make_test(BPREngineTest.cpp BPREngineTest)
+# make_test(DatasetReaderTest.cpp DatasetReaderTest)
+# make_test(EngineTest.cpp EngineTest)
+# make_test(FactorDataTest.cpp FactorDataTest)
+# make_test(MatrixTest.cpp MatrixTest)
+# make_test(MetricsTest.cpp MetricsTest)
+# make_test(MetricsManagerTest.cpp MetricsManagerTest)
+# make_test(ParallelExecutorTest.cpp ParallelExecutorTest)
+# make_test(ThreadPoolTest.cpp ThreadPoolTest)
+# make_test(UtilTest.cpp UtilTest)
+# make_test(VectorTest.cpp VectorTest)
+# make_test(WALSEngineTest.cpp WALSEngineTest)

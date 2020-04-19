@@ -21,6 +21,9 @@
 namespace distributed {
 namespace labor {
 
+static const char* OK = "OK";
+static const char* FAIL = "FAIL";
+
 bool Labor::init() {
 
   if (!start_connect())
@@ -175,7 +178,7 @@ bool Labor::handle_head() {
 
     // 无论何时，Labor收到kPushRate都直接更新本地数据
 
-    VLOG(3) << head_.dump();
+    VLOG(3) << "OpCode::kPushRate head " << std::endl << head_.dump();
 
     int64_t item_sz = head_.length / sizeof(qmf::DatasetElem);
     bigdata_ptr_->rating_vec_.resize(item_sz);
@@ -205,11 +208,9 @@ bool Labor::handle_head() {
     bigdata_ptr_->YtY_ptr_ =
       std::make_shared<qmf::Matrix>(head_.nfactors, head_.nfactors);
 
-    // response
-    const char* msg = "OK";
-    if (!SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp, msg, 2,
+    if (!SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp, OK, strlen(OK),
                             head_.taskid, head_.epchoid)) {
-      LOG(ERROR) << "send response failed.";
+      LOG(ERROR) << "send OpCode::kPushRateRsp failed.";
     }
 
     break;
@@ -223,7 +224,7 @@ bool Labor::handle_head() {
     // ! 否则下次通信的时候还是会串话，导致头解析失败
     //
 
-    VLOG(3) << head_.dump();
+    VLOG(3) << "OpCode::kPushFixed head " << std::endl << head_.dump();
 
     if (head_.taskid != bigdata_ptr_->taskid()) {
       LOG(ERROR) << "taskid mismatch, local " << bigdata_ptr_->taskid()
@@ -231,19 +232,16 @@ bool Labor::handle_head() {
 
       RecvOps::recv_and_drop(socketfd_, head_.length);
 
-      const char* msg = "FA";
-      if (!SendOps::send_bulk(socketfd_, OpCode::kErrorRsp, msg, 2,
+      if (!SendOps::send_bulk(socketfd_, OpCode::kErrorRsp, FAIL, strlen(FAIL),
                               bigdata_ptr_->taskid(),
                               bigdata_ptr_->epchoid())) {
-        LOG(ERROR) << "send response failed.";
+        LOG(ERROR) << "send OpCode::kErrorRsp failed.";
       }
       break;
     }
 
-    const int64_t infer_sz =
+    const size_t infer_sz =
       head_.length / (head_.nfactors * sizeof(qmf::Double));
-
-    VLOG(3) << head_.dump();
     VLOG(3) << "detected factors item/user size: " << infer_sz;
 
     // epcho_id_ = 1, 3, 5, ... fix item, cal user
@@ -254,7 +252,7 @@ bool Labor::handle_head() {
     if (iterate_user) {
 
       if (infer_sz != engine_ptr_->nitems()) {
-        LOG(FATAL) << "inference item size " << infer_sz << ", but dataset "
+        LOG(FATAL) << "inference items size " << infer_sz << ", but dataset "
                    << engine_ptr_->nitems();
       }
 
@@ -264,7 +262,7 @@ bool Labor::handle_head() {
     } else {
 
       if (infer_sz != engine_ptr_->nusers()) {
-        LOG(FATAL) << "inference user size " << infer_sz << ", but dataset "
+        LOG(FATAL) << "inference users size " << infer_sz << ", but dataset "
                    << engine_ptr_->nusers();
       }
 
@@ -273,12 +271,14 @@ bool Labor::handle_head() {
     }
 
     if (!RecvOps::recv_message(socketfd_, head_, dat)) {
-      LOG(ERROR) << "recv fixed factors failed.";
+      LOG(ERROR) << "recv fixed factors length " << head_.length << " failed.";
       break;
     }
 
     bigdata_ptr_->set_param(head_);
 
+    VLOG(3) << "YtY matrix size: (" << bigdata_ptr_->YtY_ptr_->ncols() << ","
+            << bigdata_ptr_->YtY_ptr_->ncols() << ")";
     if (iterate_user) {
       const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
       engine_ptr_->computeXtX(matrix, bigdata_ptr_->YtY_ptr_.get());
@@ -287,11 +287,9 @@ bool Labor::handle_head() {
       engine_ptr_->computeXtX(matrix, bigdata_ptr_->YtY_ptr_.get());
     }
 
-    // response
-    const char* msg = "OK";
-    if (!SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp, msg, 2,
+    if (!SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp, OK, strlen(OK),
                             head_.taskid, head_.epchoid)) {
-      LOG(ERROR) << "send response failed.";
+      LOG(ERROR) << "send OpCode::kPushFixedRsp failed.";
     }
 
     break;
@@ -299,34 +297,26 @@ bool Labor::handle_head() {
 
   case static_cast<int>(OpCode::kCalc): {
 
-    VLOG(3) << head_.dump();
+    VLOG(3) << "OpCode::kCalc head " << std::endl << head_.dump();
 
     // 只有taskid和epchoid完全一致，才可以进行计算
     if (head_.taskid != bigdata_ptr_->taskid() ||
         head_.epchoid != bigdata_ptr_->epchoid()) {
       LOG(ERROR) << "taskid/epchoid mismatch, local " << bigdata_ptr_->taskid()
-                 << ":" << bigdata_ptr_->epchoid() << ", but recv "
+                 << ":" << bigdata_ptr_->epchoid() << ", but recvived "
                  << head_.taskid << ":" << head_.epchoid;
 
       RecvOps::recv_and_drop(socketfd_, head_.length);
-
-      const char* msg = "FA";
-      if (!SendOps::send_bulk(socketfd_, OpCode::kErrorRsp, msg, 2,
+      if (!SendOps::send_bulk(socketfd_, OpCode::kErrorRsp, FAIL, strlen(FAIL),
                               bigdata_ptr_->taskid(),
                               bigdata_ptr_->epchoid())) {
-        LOG(ERROR) << "send response failed.";
+        LOG(ERROR) << "send OpCode::kErrorRsp failed.";
       }
       break;
     }
 
-    // 么用的两个字节 CA
-    std::vector<char> msg;
-    msg.resize(head_.length);
-    char* buff = msg.data();
-    if (!RecvOps::recv_message(socketfd_, head_, buff)) {
-      LOG(ERROR) << "recv dump message failed.";
-      break;
-    }
+    // 没用的两个字节 "CA"
+    RecvOps::recv_and_drop(socketfd_, head_.length);
 
     // 执行计算
     bool iterate_user = bigdata_ptr_->epchoid() % 2;
@@ -340,7 +330,7 @@ bool Labor::handle_head() {
         start_idx, end_idx, *bigdata_ptr_->user_factor_ptr_,
         engine_ptr_->userIndex_, engine_ptr_->userSignals_,
         *bigdata_ptr_->item_factor_ptr_, engine_ptr_->itemIndex_);
-      LOG(INFO) << "current loss: " << loss;
+      LOG(INFO) << "bucket " << head_.stepinfo() << " loss: " << loss;
 
       // 回传 user factors 结果
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
@@ -352,7 +342,7 @@ bool Labor::handle_head() {
       if (!SendOps::send_bulk(socketfd_, OpCode::kCalcRsp, dat, len,
                               bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
                               head_.nfactors, head_.bucket)) {
-        LOG(ERROR) << "send response failed.";
+        LOG(ERROR) << "send OpCode::kCalcRsp failed.";
       }
 
     } else {
@@ -365,7 +355,7 @@ bool Labor::handle_head() {
         start_idx, end_idx, *bigdata_ptr_->item_factor_ptr_,
         engine_ptr_->itemIndex_, engine_ptr_->itemSignals_,
         *bigdata_ptr_->user_factor_ptr_, engine_ptr_->userIndex_);
-      LOG(INFO) << "current loss: " << loss;
+      LOG(INFO) << "bucket " << head_.stepinfo() << " loss: " << loss;
 
       // 回传 item factors 结果
       const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
@@ -377,7 +367,7 @@ bool Labor::handle_head() {
       if (!SendOps::send_bulk(socketfd_, OpCode::kCalcRsp, dat, len,
                               bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
                               head_.nfactors, head_.bucket)) {
-        LOG(ERROR) << "send response failed.";
+        LOG(ERROR) << "send OpCode::kCalcRsp failed.";
       }
     }
 

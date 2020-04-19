@@ -32,15 +32,15 @@ class SendOps {
     while (sent < len) {
       int retval = ::write(socketfd, buff + sent, len - sent);
       if (retval < 0) {
-        LOG(ERROR) << "write/send error: " << strerror(errno);
+        LOG(ERROR) << "SendOps write error: " << strerror(errno);
         return false;
       }
 
-      VLOG(3) << "this term sent " << sent << ", retval " << retval;
+      VLOG(3) << "sent " << sent << ", retval " << retval;
       sent += retval;
     }
 
-    VLOG(3) << "successful sent " << sent;
+    VLOG(3) << "total sent " << sent;
     return true;
   }
 
@@ -83,7 +83,6 @@ class SendOps {
              socketfd, reinterpret_cast<const char*>(&head), sizeof(Head)) &&
            send_lite(socketfd, buff, len);
   }
-
 };
 
 } // end namespace distributed

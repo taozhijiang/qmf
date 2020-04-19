@@ -118,9 +118,9 @@ void Scheduler::select_loop() {
     tv.tv_sec = 1;
     tv.tv_usec = 0;
 
-    size_t maxfd = select_ptr_->maxfd_;
+    int maxfd = select_ptr_->maxfd_;
     fd_set rfds = select_ptr_->readfds_;
-    int retval = ::select(select_ptr_->maxfd_ + 1, &rfds, NULL, NULL, &tv);
+    int retval = ::select(maxfd + 1, &rfds, NULL, NULL, &tv);
 
     if (retval < 0) {
       LOG(ERROR) << "select error, critical problem: " << strerror(errno);
@@ -132,11 +132,11 @@ void Scheduler::select_loop() {
     } else if (retval == 0) {
 
       // LOG(INFO) << "select timeout";
-      VLOG(3) << "select timeout";
+      // VLOG(3) << "select timeout";
 
     } else {
 
-      for (int ss = 0; ss <= select_ptr_->maxfd_; ++ss) {
+      for (int ss = 0; ss <= maxfd; ++ss) {
 
         if (!FD_ISSET(ss, &rfds))
           continue;
@@ -177,8 +177,8 @@ void Scheduler::select_loop() {
 
           continue;
         }
-
-        VLOG(3) << "normal socket event :" << ss;
+        
+        // handle normal socket event
         handle_read(ss);
 
       } // end for
