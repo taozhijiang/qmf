@@ -41,7 +41,14 @@ void WALSEngine::init(const std::vector<DatasetElem>& dataset) {
   groupSignals(userSignals_, userIndex_, mutableDataset);
   // swap userId with itemId
   for (auto& elem : mutableDataset) {
+  // g++ will complain for "cannot bind packed field to xxx&"
+#if !defined(__GNUC__)
     std::swap(elem.userId, elem.itemId);
+#else
+    auto tmp = elem.userId;
+    elem.userId = elem.itemId;
+    elem.itemId = tmp;
+#endif
   }
   groupSignals(itemSignals_, itemIndex_, mutableDataset);
 

@@ -195,18 +195,22 @@ bool Labor::handle_head() {
     // build index ...
     engine_ptr_->init();
 
-    // build factors
+    //
+    // g++ will complain for "cannot bind packed field to xxx &"
+    // copy to avoid it
+    // 
+    auto nfactors = head_.nfactors;
     bigdata_ptr_->item_factor_ptr_ =
-      std::make_shared<qmf::FactorData>(engine_ptr_->nitems(), head_.nfactors);
+      std::make_shared<qmf::FactorData>(engine_ptr_->nitems(), nfactors);
     bigdata_ptr_->user_factor_ptr_ =
-      std::make_shared<qmf::FactorData>(engine_ptr_->nusers(), head_.nfactors);
+      std::make_shared<qmf::FactorData>(engine_ptr_->nusers(), nfactors);
 
     // only setFactors can allocate internal space
     bigdata_ptr_->item_factor_ptr_->setFactors();
     bigdata_ptr_->user_factor_ptr_->setFactors();
 
     bigdata_ptr_->YtY_ptr_ =
-      std::make_shared<qmf::Matrix>(head_.nfactors, head_.nfactors);
+      std::make_shared<qmf::Matrix>(nfactors, nfactors);
 
     if (!SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp, OK, strlen(OK),
                             head_.taskid, head_.epchoid)) {

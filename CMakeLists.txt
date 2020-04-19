@@ -18,8 +18,13 @@ project(qmf)
 #find_package(OpenMP REQUIRED)
 
 # settings
-#set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wuninitialized -fopenmp")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+# clang have some problems to support openmp in macOS
 set(CMAKE_CXX_FLAGS "-std=c++14 -O0 -g -Wall -Wextra -Wuninitialized")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+set(CMAKE_CXX_FLAGS "-std=c++14 -O3 -Wall -Wextra -Wuninitialized -fopenmp")
+endif()
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "bin/")
 set(CMAKE_FILES_DIRECTORY "build/")
 

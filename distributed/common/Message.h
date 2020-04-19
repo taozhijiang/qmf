@@ -148,7 +148,7 @@ struct Head {
            opcode != static_cast<uint8_t>(OpCode::kUnspecified);
   }
 
-} __attribute__((__packed__));
+} __attribute__((aligned(1), __packed__));
 
 static const size_t kHeadSize = sizeof(Head);
 

@@ -30,7 +30,7 @@ struct DatasetElem {
   int64_t userId;
   int64_t itemId;
   Double value = 1.0;
-} __attribute__((__packed__));
+} __attribute__((aligned(1), __packed__));
 
 class DatasetReader {
  public:
@@ -56,4 +56,4 @@ class DatasetReader {
   FRIEND_TEST(DatasetReader, readOneBadFormat);
   FRIEND_TEST(DatasetReader, readAll);
 };
-}
+} // namespace qmf

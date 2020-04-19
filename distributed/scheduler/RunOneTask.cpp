@@ -187,18 +187,21 @@ bool Scheduler::do_iterate_factors() {
       // 查找可分配的 bucket
       while (bigdata_ptr_->bucket_bits_[index] &&
              bigdata_ptr_->bucket_bits_.count() < bucket_number) {
-        index = ++index % bucket_number;
+        index = (index + 1) % bucket_number;
       }
 
-      VLOG(3) << "current index " << index << ", count "
-              << bigdata_ptr_->bucket_bits_.count();
+      VLOG(3) << "procent ("
+              << ((bigdata_ptr_->bucket_bits_.count() * 100) / bucket_number)
+              << "%) finished, current index " << index << ", finished count "
+              << bigdata_ptr_->bucket_bits_.count() << ", total "
+              << bucket_number;
 
       if (!bigdata_ptr_->bucket_bits_[index]) {
 
         push_calc_bucket(index, connection->socket_);
         connection->is_calculating_ = true;
 
-        index = ++index % bucket_number;
+        index = (index + 1) % bucket_number;
       }
 
       if (bigdata_ptr_->bucket_bits_.count() == bucket_number) {
@@ -206,9 +209,8 @@ bool Scheduler::do_iterate_factors() {
         return true;
       }
     }
-    
-    std::this_thread::sleep_for(std::chrono::seconds(1));
 
+    std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
   return true;

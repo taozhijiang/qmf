@@ -37,7 +37,14 @@ void WALSEngineLite::init() {
 
   // swap userId with itemId
   for (auto& elem : mutableDataset) {
+// g++ will complain for "cannot bind packed field to xxx&"
+#if !defined(__GNUC__)
     std::swap(elem.userId, elem.itemId);
+#else
+    auto tmp = elem.userId;
+    elem.userId = elem.itemId;
+    elem.itemId = tmp;
+#endif
   }
   groupSignals(itemSignals_, itemIndex_, mutableDataset);
 }
@@ -169,7 +176,9 @@ Double WALSEngineLite::iterate(uint64_t start_index,
   Matrix YtY(X.ncols(), X.ncols());
   computeXtX(Y, &YtY);
 
-  // omp_set_num_threads(16);
+#if defined(__GNUC__)
+  omp_set_num_threads(16);
+#endif
 
   Double loss = 0.0;
   const auto alpha = bigdata_ptr_->confidence();

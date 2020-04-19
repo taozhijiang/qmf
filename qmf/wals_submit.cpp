@@ -6,6 +6,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <cstring>
 #include <iostream>
 #include <distributed/common/Message.h>
 
