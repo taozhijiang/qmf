@@ -81,6 +81,7 @@ class SendOps {
              socketfd, reinterpret_cast<const char*>(&head), sizeof(Head)) &&
            send_lite(socketfd, buff, len);
   }
+
 };
 
 } // end namespace distributed

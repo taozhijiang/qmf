@@ -29,8 +29,8 @@ bool Connection::event() {
     char* ptr = reinterpret_cast<char*>(&head_);
 
     // need to read more
-    if (head_idx_ < sizeof(Head)) {
-      int len = ::read(socket_, ptr + head_idx_, sizeof(Head) - head_idx_);
+    if (head_idx_ < kHeadSize) {
+      int len = ::read(socket_, ptr + head_idx_, kHeadSize - head_idx_);
       if (len == -1) {
         LOG(ERROR) << "read head failed for " << self();
         return false;
@@ -42,7 +42,7 @@ bool Connection::event() {
       head_idx_ += len;
 
       // need additional read
-      if (head_idx_ < sizeof(Head)) {
+      if (head_idx_ < kHeadSize) {
         return true;
       }
     }
@@ -114,6 +114,7 @@ bool Connection::handle_head() {
   case static_cast<int>(OpCode::kPushRateRsp):
   case static_cast<int>(OpCode::kPushFixedRsp):
   case static_cast<int>(OpCode::kCalcRsp):
+  case static_cast<int>(OpCode::kErrorRsp):
     break;
 
   case static_cast<int>(OpCode::kSubmitTaskRsp):
@@ -122,7 +123,7 @@ bool Connection::handle_head() {
   case static_cast<int>(OpCode::kPushFixed):
   case static_cast<int>(OpCode::kCalc):
   default:
-    LOG(ERROR) << "invalid OpCode received from scheduler:"
+    LOG(FATAL) << "invalid OpCode received from scheduler:"
                << static_cast<int>(head_.opcode);
     retval = false;
     break;
@@ -217,11 +218,107 @@ bool Connection::handle_body() {
     break;
   }
 
-  case static_cast<int>(OpCode::kCalcRsp):
-
+  case static_cast<int>(OpCode::kCalcRsp): {
     LOG(INFO) << "NOT IMPLEMENTED... " << std::endl;
     reset();
     break;
+  }
+
+  case static_cast<int>(OpCode::kErrorRsp): {
+
+    // 正常情况下，Scheduler开始计算的时候，都会将评价矩阵和每一轮
+    // 的FixedFactor发送给所有Labor，然后再开始分片计算，但是如果
+    // 有中途失败或者重新加入的机器，就会出现状态不一致的情况，这个时
+    // 候返回Error，Scheduler根据返回的Head信息选择重新推送Rate或
+    // 者是FixedFactor即可
+
+    // 补发需要和主线程push进行互斥保护，否则labor可能收到乱序的不完整报文
+
+    auto& bigdata_ptr = scheduler_.bigdata_ptr();
+
+    do {
+      if (head_.taskid != bigdata_ptr->taskid()) {
+
+        LOG(INFO) << "found remote taskid: " << head_.taskid << ", update it with "
+                  << bigdata_ptr->taskid();
+
+        if (lock_socket_.test_and_set()) {
+          LOG(INFO) << "connection socket used by other ..." << self();
+          break;
+        }
+
+        VLOG(3) << "== LUCKY resent task " << bigdata_ptr->taskid()
+                << " rating to remote " << self();
+
+        const auto& dataset = bigdata_ptr->rating_vec_;
+        const char* dat = reinterpret_cast<const char*>(dataset.data());
+        uint64_t len = sizeof(dataset[0]) * dataset.size();
+
+        if (!SendOps::send_bulk(socket_, OpCode::kPushRate, dat, len,
+                                bigdata_ptr->taskid(), bigdata_ptr->epchoid(),
+                                bigdata_ptr->nfactors(), bigdata_ptr->lambda(),
+                                bigdata_ptr->confidence())) {
+          LOG(ERROR) << "fallback sending rating to " << self() << " failed.";
+        }
+
+        lock_socket_.clear();
+
+      } else if (head_.epchoid != bigdata_ptr->epchoid()) {
+
+        LOG(INFO) << "found for taskid " << head_.taskid
+                  << ", remote epchoid: " << head_.epchoid
+                  << ", update it with " << bigdata_ptr->epchoid();
+
+        if (lock_socket_.test_and_set()) {
+          LOG(INFO) << "connection socket used by other ..." << self();
+          break;
+        }
+
+        VLOG(3) << "== LUCKY resent fixedfactor " << bigdata_ptr->taskid()
+                << ":" << bigdata_ptr->epchoid() << " rating to remote "
+                << self();
+
+        const char* dat = nullptr;
+        uint64_t len = 0;
+        if (bigdata_ptr->epchoid() % 2) {
+          const qmf::Matrix& matrix =
+            bigdata_ptr->item_factor_ptr_->getFactors();
+          dat = reinterpret_cast<const char*>(
+            const_cast<qmf::Matrix&>(matrix).data());
+          len =
+            sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
+          LOG(INFO) << "epcho_id " << bigdata_ptr->epchoid()
+                    << " transform itemFactors with size " << len;
+        } else {
+          const qmf::Matrix& matrix =
+            bigdata_ptr->user_factor_ptr_->getFactors();
+          dat = reinterpret_cast<const char*>(
+            const_cast<qmf::Matrix&>(matrix).data());
+          len =
+            sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
+          LOG(INFO) << "epcho_id " << bigdata_ptr->epchoid()
+                    << " transform userFactors with size " << len;
+        }
+
+        if (!SendOps::send_bulk(socket_, OpCode::kPushFixed, dat, len,
+                                bigdata_ptr->taskid(), bigdata_ptr->epchoid(),
+                                bigdata_ptr->nfactors(), bigdata_ptr->lambda(),
+                                bigdata_ptr->confidence())) {
+          LOG(ERROR) << "fallback sending fixed to " << self() << " failed.";
+        }
+
+        lock_socket_.clear();
+
+      } else {
+
+        LOG(FATAL) << "undeteced error.";
+      }
+
+    } while (0);
+
+    reset();
+    break;
+  }
 
   case static_cast<int>(OpCode::kSubmitTaskRsp):
   case static_cast<int>(OpCode::kAttachLaborRsp):
@@ -229,7 +326,7 @@ bool Connection::handle_body() {
   case static_cast<int>(OpCode::kPushFixed):
   case static_cast<int>(OpCode::kCalc):
   default:
-    LOG(ERROR) << "invalid OpCode received from scheduler:"
+    LOG(FATAL) << "invalid OpCode received from scheduler:"
                << static_cast<int>(head_.opcode);
     retval = false;
     break;

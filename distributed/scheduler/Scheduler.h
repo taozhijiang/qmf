@@ -37,31 +37,7 @@ class Scheduler {
   Scheduler(const std::string& addr, int32_t port) : addr_(addr), port_(port) {
   }
 
-  bool init() {
-
-    if (!start_listen())
-      return false;
-
-    connections_ptr_ = std::make_shared<connections_type>();
-    if (!connections_ptr_) {
-      LOG(ERROR) << "create Connections failed.";
-      return false;
-    }
-
-    bigdata_ptr_ = std::make_unique<BigData>();
-    if (!bigdata_ptr_) {
-      LOG(ERROR) << "create BigData failed.";
-      return false;
-    }
-
-    engine_ptr_ = std::make_unique<qmf::WALSEngineLite>(bigdata_ptr_);
-    if (!engine_ptr_) {
-      LOG(ERROR) << "create WALSEngineLite failed.";
-      return false;
-    }
-
-    return true;
-  }
+  bool init();
 
   void select_loop();
   void terminate() {
@@ -72,12 +48,25 @@ class Scheduler {
     task_queue_.PUSH(task);
   }
 
+  std::unique_ptr<BigData>& bigdata_ptr() {
+    return bigdata_ptr_;
+  }
+
+  connections_ptr_type share_connections_ptr() {
+    connections_ptr_type ret{};
+    {
+      const std::lock_guard<std::mutex> lock(connections_mutex_);
+      ret = connections_ptr_;
+    }
+    return ret;
+  }
+
  private:
   void handle_read(int socket);
 
   // 数据推送
-  bool push_all_rating(const std::shared_ptr<TaskDef>& taskdef);
-  bool push_all_fixed(const std::shared_ptr<TaskDef>& taskdef);
+  bool push_all_rating();
+  bool push_all_fixed_factors();
 
   // 只检查所有可用的labor数目
   // check为true，则校验taskid和epcho相匹配的labor数目

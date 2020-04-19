@@ -13,6 +13,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <atomic>         // std::atomic_flag
 
 #include <distributed/common/Common.h>
 #include <distributed/common/Message.h>
@@ -100,6 +101,7 @@ class Connection {
   const std::string addr_;
   const int port_;
   const int socket_;
+  std::atomic_flag lock_socket_ = ATOMIC_FLAG_INIT;
 
  private:
   

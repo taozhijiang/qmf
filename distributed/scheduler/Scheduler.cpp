@@ -20,6 +20,32 @@
 namespace distributed {
 namespace scheduler {
 
+bool Scheduler::init() {
+
+  if (!start_listen())
+    return false;
+
+  connections_ptr_ = std::make_shared<connections_type>();
+  if (!connections_ptr_) {
+    LOG(ERROR) << "create Connections failed.";
+    return false;
+  }
+
+  bigdata_ptr_ = std::make_unique<BigData>();
+  if (!bigdata_ptr_) {
+    LOG(ERROR) << "create BigData failed.";
+    return false;
+  }
+
+  engine_ptr_ = std::make_unique<qmf::WALSEngineLite>(bigdata_ptr_);
+  if (!engine_ptr_) {
+    LOG(ERROR) << "create WALSEngineLite failed.";
+    return false;
+  }
+
+  return true;
+}
+
 // tcp backlog size
 static const size_t kBacklog = 10;
 
@@ -164,14 +190,10 @@ void Scheduler::select_loop() {
 
 void Scheduler::handle_read(int socket) {
 
-  connections_ptr_type copy_connections_ptr{};
-  {
-    const std::lock_guard<std::mutex> lock(connections_mutex_);
-    copy_connections_ptr = connections_ptr_;
-  }
+  connections_ptr_type copy_connections = share_connections_ptr();
 
-  auto iter = copy_connections_ptr->find(socket);
-  if (iter == copy_connections_ptr->end()) {
+  auto iter = copy_connections->find(socket);
+  if (iter == copy_connections->end()) {
     LOG(ERROR) << "socket not found in connections.";
     select_ptr_->del_fd(socket);
     return;
@@ -195,25 +217,27 @@ void Scheduler::handle_read(int socket) {
   }
 }
 
-bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
+bool Scheduler::push_all_rating() {
 
-  connections_ptr_type connections{};
-  {
-    const std::lock_guard<std::mutex> lock(connections_mutex_);
-    connections = connections_ptr_;
-  }
+  connections_ptr_type copy_connections = share_connections_ptr();
 
   // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
-  if (connections->empty()) {
+  if (copy_connections->empty()) {
     LOG(ERROR) << "no labor available now.";
     return false;
   }
 
-  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
+  for (auto iter = copy_connections->begin(); iter != copy_connections->end();
+       ++iter) {
 
     auto connection = iter->second;
     if (!connection->is_labor_)
       continue;
+
+    if (connection->lock_socket_.test_and_set()) {
+      LOG(INFO) << "connection socket used by other ..." << connection->self();
+      continue;
+    }
 
     const auto& dataset = bigdata_ptr_->rating_vec_;
 
@@ -221,33 +245,39 @@ bool Scheduler::push_all_rating(const std::shared_ptr<TaskDef>& taskdef) {
     uint64_t len = sizeof(dataset[0]) * dataset.size();
 
     if (!SendOps::send_bulk(connection->socket_, OpCode::kPushRate, dat, len,
-                            bigdata_ptr_->taskid(), bigdata_ptr_->epchoid())) {
+                            bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
+                            bigdata_ptr_->nfactors(), bigdata_ptr_->lambda(),
+                            bigdata_ptr_->confidence())) {
       LOG(ERROR) << "sending rating to " << connection->self() << " failed.";
     }
+
+    connection->lock_socket_.clear();
   }
 
   return true;
 }
 
-bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
+bool Scheduler::push_all_fixed_factors() {
 
-  connections_ptr_type connections{};
-  {
-    const std::lock_guard<std::mutex> lock(connections_mutex_);
-    connections = connections_ptr_;
-  }
+  connections_ptr_type copy_connections = share_connections_ptr();
 
   // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
-  if (connections->empty()) {
+  if (copy_connections->empty()) {
     LOG(ERROR) << "no labor available now.";
     return false;
   }
 
-  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
+  for (auto iter = copy_connections->begin(); iter != copy_connections->end();
+       ++iter) {
 
     auto connection = iter->second;
     if (!connection->is_labor_)
       continue;
+
+    if (connection->lock_socket_.test_and_set()) {
+      LOG(INFO) << "connection socket used by other ..." << connection->self();
+      continue;
+    }
 
     // epcho_id_ = 1, 3, 5, ... fix item, cal user
     // epcho_id_ = 2, 4, 6, ... fix user, cal item
@@ -260,21 +290,24 @@ bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
       LOG(INFO) << "epcho_id " << bigdata_ptr_->epchoid()
-                << " transform itemFactors with size " << len;
+                << " will transform itemFactors with size " << len;
     } else {
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
       LOG(INFO) << "epcho_id " << bigdata_ptr_->epchoid()
-                << " transform userFactors with size " << len;
+                << " will transform userFactors with size " << len;
     }
 
     if (!SendOps::send_bulk(connection->socket_, OpCode::kPushFixed, dat, len,
                             bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
-                            bigdata_ptr_->nfactors())) {
+                            bigdata_ptr_->nfactors(), bigdata_ptr_->lambda(),
+                            bigdata_ptr_->confidence())) {
       LOG(ERROR) << "sending fixed to " << connection->self() << " failed.";
     }
+
+    connection->lock_socket_.clear();
   }
 
   return true;
@@ -282,15 +315,11 @@ bool Scheduler::push_all_fixed(const std::shared_ptr<TaskDef>& taskdef) {
 
 size_t Scheduler::connections_count(bool check) {
 
-  connections_ptr_type connections{};
-  {
-    const std::lock_guard<std::mutex> lock(connections_mutex_);
-    connections = connections_ptr_;
-  }
-
+  connections_ptr_type copy_connections = share_connections_ptr();
   size_t count = 0;
 
-  for (auto iter = connections->begin(); iter != connections->end(); ++iter) {
+  for (auto iter = copy_connections->begin(); iter != copy_connections->end();
+       ++iter) {
 
     auto connection = iter->second;
     if (!connection->is_labor_)

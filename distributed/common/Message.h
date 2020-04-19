@@ -59,6 +59,9 @@ enum class OpCode : uint8_t {
   kCalc = 9,
   kCalcRsp = 10,
 
+  // 当业务校验失败(比如taskid和epchoid不匹配等)返回
+  kErrorRsp = 11, 
+
   kUnspecified = 100,
 };
 

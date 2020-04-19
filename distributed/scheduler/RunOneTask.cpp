@@ -88,7 +88,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   const size_t kStartConnectionCount = connections_count();
   LOG(INFO) << "current active labor: " << kStartConnectionCount;
 
-  if (!push_all_rating(taskdef)) {
+  if (!push_all_rating()) {
     LOG(ERROR) << "scheduler push rating matrix to all labor failed.";
     return false;
   }
@@ -106,7 +106,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   for (size_t i = 0; i < taskdef->nepochs(); ++i) {
 
     bigdata_ptr_->incr_epchoid();
-    push_all_fixed(taskdef);
+    push_all_fixed_factors();
 
     // waiting all FixedLoad
     while ((fixed_count = connections_count(true)) < kStartConnectionCount) {
@@ -119,7 +119,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     // calc
 
     bigdata_ptr_->incr_epchoid();
-    push_all_fixed(taskdef);
+    push_all_fixed_factors();
 
     // waiting all FixedLoad
     while ((fixed_count = connections_count(true)) < kStartConnectionCount) {

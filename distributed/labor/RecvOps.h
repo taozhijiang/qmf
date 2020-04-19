@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <algorithm>
 #include <string>
 
 #include <distributed/common/Message.h>
@@ -30,7 +31,7 @@ class RecvOps {
       return false;
 
     char* ptr = reinterpret_cast<char*>(head);
-    int recv = 0;
+    uint64_t recv = 0;
     while (recv < kHeadSize) {
       int retval = ::read(socketfd, ptr + recv, kHeadSize - recv);
       if (retval < 0) {
@@ -43,7 +44,7 @@ class RecvOps {
           }
 
           // 什么都每收到，not critical
-          VLOG(3) << "recv timeout, and no previous recv: " << recv;
+          // VLOG(3) << "recv timeout, and no previous recv: " << recv;
           return false;
 
         } else {
@@ -80,7 +81,7 @@ class RecvOps {
     if (head.length == 0 || !buff)
       return false;
 
-    int recv = 0;
+    uint64_t recv = 0;
     while (recv < head.length) {
       int retval = ::read(socketfd, buff + recv, head.length - recv);
       if (retval < 0) {
@@ -102,6 +103,39 @@ class RecvOps {
     }
 
     VLOG(3) << "successful recved " << recv;
+    return true;
+  }
+
+  // 读取 len 个数据，废弃掉
+  static bool recv_and_drop(int socketfd, uint64_t len) {
+
+    if (len == 0)
+      return true;
+
+    char buff[1 * 1024 * 1024]{};
+    uint64_t recv = 0;
+
+    while (recv < len) {
+    
+      int retval = ::read(socketfd, buff, std::min<uint64_t>(sizeof(buff), len - recv));
+      if (retval < 0) {
+
+        // recv 超时
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+          continue;
+
+        LOG(ERROR) << "read error: " << strerror(errno);
+        return false;
+
+      } else if (retval == 0) {
+
+        LOG(ERROR) << "peer close down: " << socketfd;
+        return false;
+      }
+
+      recv += retval;
+    }
+
     return true;
   }
 };
