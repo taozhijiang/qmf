@@ -10,18 +10,23 @@
 
 #include <cstdlib>
 #include <cstdint>
+#include <bitset> // std::bitset
 
 #include <qmf/DatasetReader.h>
 // Matrix内部是std::vector<Double>存储的！
 #include <qmf/Matrix.h>
 #include <qmf/FactorData.h>
 
+#include <distributed/common/Common.h>
 #include <distributed/common/Message.h>
 
 namespace distributed {
 
 // 每一个任务、每一轮迭代的时候都需要更新
 struct BigData {
+
+  // TODO: dynamic create task_bits for performance
+  using bucket_bits_type = std::bitset<kBucketBits>;
 
   BigData() {
 
@@ -51,12 +56,10 @@ struct BigData {
     return confidence_;
   }
 
+  // start new epcho
   uint32_t incr_epchoid() {
+    bucket_bits_.reset();
     return ++epchoid_;
-  }
-
-  void set_epchoid(uint32_t epchoid) {
-    epchoid_ = epchoid;
   }
 
   // 用户评价矩阵
@@ -67,6 +70,10 @@ struct BigData {
 
   std::shared_ptr<qmf::FactorData> item_factor_ptr_;
   std::shared_ptr<qmf::FactorData> user_factor_ptr_;
+  std::shared_ptr<qmf::Matrix> YtY_ptr_;
+
+  // used in scheduler
+  bucket_bits_type bucket_bits_;
 
   // reset for new task
   // called from scheduler
@@ -78,10 +85,13 @@ struct BigData {
     nfactors_ = nfactors;
     lambda_ = lambda;
     confidence_ = confidence;
+
+    bucket_bits_.reset();
   }
 
   // called from labor
   void set_param(const Head& head) {
+
     taskid_ = head.taskid;
     epchoid_ = head.epchoid;
     nfactors_ = head.nfactors;

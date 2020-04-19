@@ -14,7 +14,7 @@
 
 #include <distributed/labor/Labor.h>
 #include <distributed/common/SendOps.h>
-#include <distributed/labor/RecvOps.h>
+#include <distributed/common/RecvOps.h>
 
 #include <glog/logging.h>
 
@@ -202,6 +202,9 @@ bool Labor::handle_head() {
     bigdata_ptr_->item_factor_ptr_->setFactors();
     bigdata_ptr_->user_factor_ptr_->setFactors();
 
+    bigdata_ptr_->YtY_ptr_ =
+      std::make_shared<qmf::Matrix>(head_.nfactors, head_.nfactors);
+
     // response
     const char* msg = "OK";
     if (!SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp, msg, 2,
@@ -219,6 +222,8 @@ bool Labor::handle_head() {
     // ! 即使是检查错误，这里也需要把剩余的 length 数据读取完
     // ! 否则下次通信的时候还是会串话，导致头解析失败
     //
+
+    VLOG(3) << head_.dump();
 
     if (head_.taskid != bigdata_ptr_->taskid()) {
       LOG(ERROR) << "taskid mismatch, local " << bigdata_ptr_->taskid()
@@ -245,7 +250,8 @@ bool Labor::handle_head() {
     // epcho_id_ = 2, 4, 6, ... fix user, cal item
 
     char* dat = nullptr;
-    if (head_.epchoid % 2) {
+    bool iterate_user = head_.epchoid % 2;
+    if (iterate_user) {
 
       if (infer_sz != engine_ptr_->nitems()) {
         LOG(FATAL) << "inference item size " << infer_sz << ", but dataset "
@@ -273,10 +279,18 @@ bool Labor::handle_head() {
 
     bigdata_ptr_->set_param(head_);
 
+    if (iterate_user) {
+      const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
+      engine_ptr_->computeXtX(matrix, bigdata_ptr_->YtY_ptr_.get());
+    } else {
+      const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
+      engine_ptr_->computeXtX(matrix, bigdata_ptr_->YtY_ptr_.get());
+    }
+
     // response
-    std::string message = "OK";
-    if (!SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp, message.c_str(),
-                            2, head_.taskid, head_.epchoid)) {
+    const char* msg = "OK";
+    if (!SendOps::send_bulk(socketfd_, OpCode::kPushFixedRsp, msg, 2,
+                            head_.taskid, head_.epchoid)) {
       LOG(ERROR) << "send response failed.";
     }
 
@@ -284,6 +298,8 @@ bool Labor::handle_head() {
   }
 
   case static_cast<int>(OpCode::kCalc): {
+
+    VLOG(3) << head_.dump();
 
     // 只有taskid和epchoid完全一致，才可以进行计算
     if (head_.taskid != bigdata_ptr_->taskid() ||
@@ -301,6 +317,68 @@ bool Labor::handle_head() {
         LOG(ERROR) << "send response failed.";
       }
       break;
+    }
+
+    // 么用的两个字节 CA
+    std::vector<char> msg;
+    msg.resize(head_.length);
+    char* buff = msg.data();
+    if (!RecvOps::recv_message(socketfd_, head_, buff)) {
+      LOG(ERROR) << "recv dump message failed.";
+      break;
+    }
+
+    // 执行计算
+    bool iterate_user = bigdata_ptr_->epchoid() % 2;
+    if (iterate_user) {
+
+      const uint64_t start_idx = head_.bucket * kBucketSize;
+      const uint64_t end_idx =
+        std::min<uint64_t>(start_idx + kBucketSize, engine_ptr_->nusers());
+
+      qmf::Double loss = engine_ptr_->iterate(
+        start_idx, end_idx, *bigdata_ptr_->user_factor_ptr_,
+        engine_ptr_->userIndex_, engine_ptr_->userSignals_,
+        *bigdata_ptr_->item_factor_ptr_, engine_ptr_->itemIndex_);
+      LOG(INFO) << "current loss: " << loss;
+
+      // 回传 user factors 结果
+      const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
+      const char* dat = reinterpret_cast<char*>(
+        const_cast<qmf::Matrix&>(matrix).data(start_idx));
+      uint64_t len =
+        (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
+
+      if (!SendOps::send_bulk(socketfd_, OpCode::kCalcRsp, dat, len,
+                              bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
+                              head_.nfactors, head_.bucket)) {
+        LOG(ERROR) << "send response failed.";
+      }
+
+    } else {
+
+      const uint64_t start_idx = head_.bucket * kBucketSize;
+      const uint64_t end_idx =
+        std::min<uint64_t>(start_idx + kBucketSize, engine_ptr_->nitems());
+
+      qmf::Double loss = engine_ptr_->iterate(
+        start_idx, end_idx, *bigdata_ptr_->item_factor_ptr_,
+        engine_ptr_->itemIndex_, engine_ptr_->itemSignals_,
+        *bigdata_ptr_->user_factor_ptr_, engine_ptr_->userIndex_);
+      LOG(INFO) << "current loss: " << loss;
+
+      // 回传 item factors 结果
+      const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
+      const char* dat = reinterpret_cast<char*>(
+        const_cast<qmf::Matrix&>(matrix).data(start_idx));
+      uint64_t len =
+        (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
+
+      if (!SendOps::send_bulk(socketfd_, OpCode::kCalcRsp, dat, len,
+                              bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
+                              head_.nfactors, head_.bucket)) {
+        LOG(ERROR) << "send response failed.";
+      }
     }
 
     break;

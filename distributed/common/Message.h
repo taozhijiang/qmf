@@ -60,7 +60,7 @@ enum class OpCode : uint8_t {
   kCalcRsp = 10,
 
   // 当业务校验失败(比如taskid和epchoid不匹配等)返回
-  kErrorRsp = 11, 
+  kErrorRsp = 11,
 
   kUnspecified = 100,
 };
@@ -90,8 +90,8 @@ struct Head {
 
   // 为了高效传输，数据已经不能保证架构无关的了 ...
 
-  uint32_t bucket; // Calc时候计算对应的分片
   uint32_t nfactors;
+  uint32_t bucket; // Calc时候计算对应的分片
 
   double lambda;     // regulation lambda
   double confidence; // confidence weight
@@ -102,9 +102,10 @@ struct Head {
     char msg[256]{};
     ::snprintf(
       msg, sizeof(msg),
-      "magic:%0x, version:%0x, opcode:%0x, taskid:%0x, epchoid: %0x, bucket: "
-      "%0x, nfactors: %0x, len: %lu",
-      magic, version, opcode, taskid, epchoid, bucket, nfactors, length);
+      "magic:%0x, version:%0x, opcode:%0x, taskid:%0x, epchoid: %0x, nfactors: "
+      "%0x, bucket: %0x, lambda: %.2f confidence: %.2f len: %lu",
+      magic, version, opcode, taskid, epchoid, nfactors, bucket, lambda,
+      confidence, length);
     return msg;
   }
 
@@ -115,8 +116,8 @@ struct Head {
     opcode = opcode;
     taskid = be32toh(taskid);
     epchoid = be32toh(epchoid);
-    bucket = be32toh(bucket);
     nfactors = be32toh(nfactors);
+    bucket = be32toh(bucket);
     lambda = lambda;
     confidence = confidence;
     length = be64toh(length);
@@ -128,8 +129,8 @@ struct Head {
     opcode = opcode;
     taskid = htobe32(taskid);
     epchoid = htobe32(epchoid);
-    bucket = htobe32(bucket);
     nfactors = htobe32(nfactors);
+    bucket = htobe32(bucket);
     lambda = lambda;
     confidence = confidence;
     length = htobe64(length);

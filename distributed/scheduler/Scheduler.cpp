@@ -246,7 +246,7 @@ bool Scheduler::push_all_rating() {
 
     if (!SendOps::send_bulk(connection->socket_, OpCode::kPushRate, dat, len,
                             bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
-                            bigdata_ptr_->nfactors(), bigdata_ptr_->lambda(),
+                            bigdata_ptr_->nfactors(), 0, bigdata_ptr_->lambda(),
                             bigdata_ptr_->confidence())) {
       LOG(ERROR) << "sending rating to " << connection->self() << " failed.";
     }
@@ -302,12 +302,26 @@ bool Scheduler::push_all_fixed_factors() {
 
     if (!SendOps::send_bulk(connection->socket_, OpCode::kPushFixed, dat, len,
                             bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
-                            bigdata_ptr_->nfactors(), bigdata_ptr_->lambda(),
+                            bigdata_ptr_->nfactors(), 0, bigdata_ptr_->lambda(),
                             bigdata_ptr_->confidence())) {
       LOG(ERROR) << "sending fixed to " << connection->self() << " failed.";
     }
 
     connection->lock_socket_.clear();
+  }
+
+  return true;
+}
+
+bool Scheduler::push_calc_bucket(uint32_t bucket_idx, int socketfd) {
+
+  const char* msg = "CA";
+  if (!SendOps::send_bulk(socketfd, OpCode::kCalc, msg, 2,
+                          bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
+                          bigdata_ptr_->nfactors(), bucket_idx,
+                          bigdata_ptr_->lambda(), bigdata_ptr_->confidence())) {
+    LOG(ERROR) << "sending fixed to " << socketfd << " failed.";
+    return false;
   }
 
   return true;

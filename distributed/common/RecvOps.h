@@ -20,7 +20,6 @@
 #include <glog/logging.h>
 
 namespace distributed {
-namespace labor {
 
 class RecvOps {
 
@@ -140,7 +139,7 @@ class RecvOps {
   }
 };
 
-} // end namespace labor
+
 } // end namespace distributed
 
 #endif // __DISTRIBUTED_LABOR_RECV_OPS_H__

@@ -52,6 +52,10 @@ class Scheduler {
     return bigdata_ptr_;
   }
 
+  std::unique_ptr<qmf::WALSEngineLite>& engine_ptr() {
+    return engine_ptr_;
+  }
+
   connections_ptr_type share_connections_ptr() {
     connections_ptr_type ret{};
     {
@@ -67,6 +71,8 @@ class Scheduler {
   // 数据推送
   bool push_all_rating();
   bool push_all_fixed_factors();
+  bool push_calc_bucket(uint32_t bucket_idx, int socketfd);
+  bool do_iterate_factors();
 
   // 只检查所有可用的labor数目
   // check为true，则校验taskid和epcho相匹配的labor数目

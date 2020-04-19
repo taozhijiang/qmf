@@ -64,6 +64,7 @@ class SendOps {
                         uint32_t taskid = 0,
                         uint32_t epchoid = 0,
                         uint32_t nfactors = 0,
+                        uint32_t bucket = 0,
                         double lambda = 0,
                         double confidence = 0) {
 
@@ -73,6 +74,7 @@ class SendOps {
     head.taskid = taskid;
     head.epchoid = epchoid;
     head.nfactors = nfactors;
+    head.bucket = bucket;
     head.lambda = lambda;
     head.confidence = confidence;
     head.to_net_endian();

@@ -16,6 +16,7 @@
 #include <distributed/proto/task.pb.h>
 
 #include <distributed/common/SendOps.h>
+#include <distributed/common/RecvOps.h>
 
 #include <glog/logging.h>
 
@@ -206,11 +207,12 @@ bool Connection::handle_body() {
   }
 
   case static_cast<int>(OpCode::kPushFixedRsp): {
+
     std::string message = std::string(data_.data(), data_idx_);
     VLOG(3) << "kPushFixedRsp recv with " << message;
 
     if (message == "OK") {
-      LOG(INFO) << "kPushRateRsp return OK, update our status";
+      LOG(INFO) << "kPushFixedRsp return OK, update our status";
       task_id_ = head_.taskid;
       epcho_id_ = head_.epchoid;
     }
@@ -219,7 +221,79 @@ bool Connection::handle_body() {
   }
 
   case static_cast<int>(OpCode::kCalcRsp): {
-    LOG(INFO) << "NOT IMPLEMENTED... " << std::endl;
+
+    auto& bigdata_ptr = scheduler_.bigdata_ptr();
+    auto& engine_ptr = scheduler_.engine_ptr();
+
+    // TODO 直接下载到指定内存，避免拷贝
+    VLOG(3) << "already recv data size: " << data_idx_;
+
+    do {
+
+      // 非匹配的结果，直接丢弃
+      if (head_.taskid != bigdata_ptr->taskid() ||
+          head_.epchoid != bigdata_ptr->epchoid()) {
+        LOG(ERROR) << "unmatch calc response: " << head_.dump();
+        RecvOps::recv_and_drop(socket_, head_.length);
+        break;
+      }
+
+      // 拷贝到区域，更新 bucket_bits_
+
+      bool iterate_user = bigdata_ptr->epchoid() % 2;
+      if (iterate_user) {
+
+        const uint64_t start_idx = head_.bucket * kBucketSize;
+        const uint64_t end_idx =
+          std::min<uint64_t>(start_idx + kBucketSize, engine_ptr->nusers());
+
+        // 回传 user factors 结果
+        const qmf::Matrix& matrix = bigdata_ptr->user_factor_ptr_->getFactors();
+        char* dat = reinterpret_cast<char*>(
+          const_cast<qmf::Matrix&>(matrix).data(start_idx));
+        uint64_t len =
+          (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
+
+        if (len != head_.length) {
+          LOG(ERROR) << "length check failed, expect " << len << ", but get "
+                     << head_.length;
+          break;
+        }
+
+        ::memcpy(dat, data_.data(), head_.length);
+        bigdata_ptr->bucket_bits_[head_.bucket] = true;
+        LOG(INFO) << "handle task " << head_.taskid << " epcho "
+                  << head_.epchoid << " bucket " << head_.bucket
+                  << " successfully!";
+
+      } else {
+
+        const uint64_t start_idx = head_.bucket * kBucketSize;
+        const uint64_t end_idx =
+          std::min<uint64_t>(start_idx + kBucketSize, engine_ptr->nitems());
+
+        // 回传 user factors 结果
+        const qmf::Matrix& matrix = bigdata_ptr->item_factor_ptr_->getFactors();
+        char* dat = reinterpret_cast<char*>(
+          const_cast<qmf::Matrix&>(matrix).data(start_idx));
+        uint64_t len =
+          (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
+
+        if (len != head_.length) {
+          LOG(ERROR) << "length check failed, expect " << len << ", but get "
+                     << head_.length;
+          break;
+        }
+
+        ::memcpy(dat, data_.data(), head_.length);
+        bigdata_ptr->bucket_bits_[head_.bucket] = true;
+        LOG(INFO) << "handle task " << head_.taskid << " epcho "
+                  << head_.epchoid << " bucket " << head_.bucket
+                  << " successfully!";
+      }
+
+    } while (0);
+
     reset();
     break;
   }
@@ -239,8 +313,8 @@ bool Connection::handle_body() {
     do {
       if (head_.taskid != bigdata_ptr->taskid()) {
 
-        LOG(INFO) << "found remote taskid: " << head_.taskid << ", update it with "
-                  << bigdata_ptr->taskid();
+        LOG(INFO) << "found remote taskid: " << head_.taskid
+                  << ", update it with " << bigdata_ptr->taskid();
 
         if (lock_socket_.test_and_set()) {
           LOG(INFO) << "connection socket used by other ..." << self();
@@ -254,10 +328,10 @@ bool Connection::handle_body() {
         const char* dat = reinterpret_cast<const char*>(dataset.data());
         uint64_t len = sizeof(dataset[0]) * dataset.size();
 
-        if (!SendOps::send_bulk(socket_, OpCode::kPushRate, dat, len,
-                                bigdata_ptr->taskid(), bigdata_ptr->epchoid(),
-                                bigdata_ptr->nfactors(), bigdata_ptr->lambda(),
-                                bigdata_ptr->confidence())) {
+        if (!SendOps::send_bulk(
+              socket_, OpCode::kPushRate, dat, len, bigdata_ptr->taskid(),
+              bigdata_ptr->epchoid(), bigdata_ptr->nfactors(), 0,
+              bigdata_ptr->lambda(), bigdata_ptr->confidence())) {
           LOG(ERROR) << "fallback sending rating to " << self() << " failed.";
         }
 
@@ -300,10 +374,10 @@ bool Connection::handle_body() {
                     << " transform userFactors with size " << len;
         }
 
-        if (!SendOps::send_bulk(socket_, OpCode::kPushFixed, dat, len,
-                                bigdata_ptr->taskid(), bigdata_ptr->epchoid(),
-                                bigdata_ptr->nfactors(), bigdata_ptr->lambda(),
-                                bigdata_ptr->confidence())) {
+        if (!SendOps::send_bulk(
+              socket_, OpCode::kPushFixed, dat, len, bigdata_ptr->taskid(),
+              bigdata_ptr->epchoid(), bigdata_ptr->nfactors(), 0,
+              bigdata_ptr->lambda(), bigdata_ptr->confidence())) {
           LOG(ERROR) << "fallback sending fixed to " << self() << " failed.";
         }
 

@@ -22,7 +22,6 @@
 
 namespace qmf {
 
-
 // 这个对象会被多次使用，所以需要保证初始化后是完全干净的
 void WALSEngineLite::init() {
 
@@ -149,11 +148,14 @@ void WALSEngineLite::sortDataset(std::vector<DatasetElem>& dataset) {
   });
 }
 
-Double WALSEngineLite::iterate(FactorData& leftData,
+Double WALSEngineLite::iterate(uint64_t start_index,
+                               uint64_t end_index,
+                               FactorData& leftData,
                                const IdIndex& leftIndex,
                                const std::vector<SignalGroup>& leftSignals,
                                const FactorData& rightData,
                                const IdIndex& rightIndex) {
+
   auto genZero = [](auto...) { return 0.0; };
   leftData.setFactors(genZero);
 
@@ -166,17 +168,16 @@ Double WALSEngineLite::iterate(FactorData& leftData,
 
   // omp_set_num_threads(16);
 
-  const size_t count = leftSignals.size();
-
   Double loss = 0.0;
   const auto alpha = bigdata_ptr_->confidence();
   const auto lambda = bigdata_ptr_->lambda();
+  // Matrix YtY = *(bigdata_ptr_->YtY_ptr_);
 
 #pragma omp parallel reduction(+ : loss)
   {
 
 #pragma omp for
-    for (size_t i = 0; i < count; ++i) {
+    for (uint64_t i = start_index; i < end_index; ++i) {
       const size_t leftIdx = leftIndex.idx(leftSignals[i].sourceId);
       loss += updateFactorsForOne(X.data(leftIdx), X.ncols(), Y, rightIndex,
                                   leftSignals[i], YtY, alpha, lambda);

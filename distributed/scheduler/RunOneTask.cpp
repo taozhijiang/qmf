@@ -117,6 +117,13 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     }
 
     // calc
+    LOG(INFO) << "begin iterate users factors ...";
+    if (!do_iterate_factors()) {
+      LOG(ERROR) << "task " << bigdata_ptr_->taskid() << ":"
+                 << bigdata_ptr_->epchoid()
+                 << " iterate users factors failed!!!";
+      return false;
+    }
 
     bigdata_ptr_->incr_epchoid();
     push_all_fixed_factors();
@@ -130,12 +137,84 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     }
 
     // calc
+    LOG(INFO) << "begin iterate items factors ...";
+    if (!do_iterate_factors()) {
+      LOG(ERROR) << "task " << bigdata_ptr_->taskid() << ":"
+                 << bigdata_ptr_->epchoid()
+                 << " iterate items factors failed!!!";
+      return false;
+    }
   }
 
   // step 5. 保存
   LOG(INFO) << "saving user_factors and item_factors ";
   engine_ptr_->saveUserFactors(taskdef->user_factors());
   engine_ptr_->saveItemFactors(taskdef->item_factors());
+
+  return true;
+}
+
+bool Scheduler::do_iterate_factors() {
+
+  bool iterate_user = bigdata_ptr_->epchoid() % 2;
+
+  uint64_t bucket_number = 0;
+  if (iterate_user) {
+    bucket_number = (engine_ptr_->nusers() + kBucketSize - 1) / kBucketSize;
+    LOG(INFO) << "users factors count " << engine_ptr_->nusers()
+              << " map to task " << bucket_number;
+  } else {
+    bucket_number = (engine_ptr_->nitems() + kBucketSize - 1) / kBucketSize;
+    LOG(INFO) << "items factors count " << engine_ptr_->nusers()
+              << " map to task " << bucket_number;
+  }
+
+  uint64_t index = 0; // 单调递增的分配索引
+
+  while (true) {
+
+    connections_ptr_type copy_connections = share_connections_ptr();
+    for (auto iter = copy_connections->begin(); iter != copy_connections->end();
+         ++iter) {
+
+      // 查找空闲的 labor
+      auto connection = iter->second;
+      if (!connection->is_labor_ || connection->is_calculating_)
+        continue;
+
+      VLOG(3) << "found avail labor: " << connection->self();
+
+      // 查找可分配的 bucket
+      while (bigdata_ptr_->bucket_bits_[index] &&
+             bigdata_ptr_->bucket_bits_.count() < bucket_number) {
+        index = ++index % bucket_number;
+      }
+
+      VLOG(3) << "current index " << index << ", count "
+              << bigdata_ptr_->bucket_bits_.count();
+
+      if (!bigdata_ptr_->bucket_bits_[index]) {
+
+        push_calc_bucket(index, connection->socket_);
+        connection->is_calculating_ = true;
+
+        index = ++index % bucket_number;
+      }
+
+      if (bigdata_ptr_->bucket_bits_.count() == bucket_number) {
+        LOG(INFO) << "iterate done!";
+        return true;
+      }
+    }
+
+    // 如果最终的任务不多了，降低频率，防止重复分发
+    if (bucket_number - bigdata_ptr_->bucket_bits_.count() >
+        connections_count(true)) {
+      std::this_thread::sleep_for(std::chrono::seconds(5));
+    } else {
+      std::this_thread::sleep_for(std::chrono::seconds(10));
+    }
+  }
 
   return true;
 }

@@ -36,9 +36,18 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+namespace distributed {
+namespace labor {
+class Labor;
+} // namespace labor
+} // namespace distributed
+
 namespace qmf {
 
 class WALSEngineLite {
+
+  friend class Labor;
+
  public:
   explicit WALSEngineLite(std::unique_ptr<distributed::BigData>& bigdata,
                           const size_t nthreads = 16)
@@ -61,7 +70,7 @@ class WALSEngineLite {
                    const IdIndex& index,
                    const std::string& fileName) const;
 
- private:
+ // private:
   struct Signal {
     int64_t id;
     Double value;
@@ -78,7 +87,10 @@ class WALSEngineLite {
 
   static void sortDataset(std::vector<DatasetElem>& dataset);
 
-  Double iterate(FactorData& leftData,
+  // 分布式场景下使用
+  Double iterate(uint64_t start_index,
+                 uint64_t end_index,
+                 FactorData& leftData,
                  const IdIndex& leftIndex,
                  const std::vector<SignalGroup>& leftSignals,
                  const FactorData& rightData,

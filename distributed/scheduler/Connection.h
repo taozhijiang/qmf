@@ -13,7 +13,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include <atomic>         // std::atomic_flag
+#include <atomic> // std::atomic_flag
 
 #include <distributed/common/Common.h>
 #include <distributed/common/Message.h>
@@ -89,9 +89,12 @@ class Connection {
   }
 
   void reset() {
+    
     head_idx_ = 0;
     data_idx_ = 0;
+
     stage_ = Stage::kHead;
+    is_calculating_ = false;
   }
 
  public:
@@ -103,8 +106,10 @@ class Connection {
   const int socket_;
   std::atomic_flag lock_socket_ = ATOMIC_FLAG_INIT;
 
+  // 是否已经分配计算了，不需要状态强一致性
+  bool is_calculating_ = false;
+
  private:
-  
   // 因为submit工具的socket也在这里，所以这里区分是否是Labor
   // 免得Scheduler误发数据
   bool is_labor_ = false;
@@ -112,7 +117,7 @@ class Connection {
   // 废弃Status参数，使用 task_id 和 epcho_id 就能够唯一确定labor的状态了
   uint32_t task_id_ = 0;
   uint32_t epcho_id_ = 0;
-  
+
   enum class Stage {
     kHead = 1, // 读取头阶段
     kBody = 2, // 读取Body阶段
