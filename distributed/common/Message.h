@@ -39,28 +39,32 @@ const static uint8_t kHeaderVersion = 0x01;
 
 enum class OpCode : uint8_t {
 
-  // Scheduler接收客户端请求
+  // Scheduler recived the submit client's request
   kSubmitTask = 1,
   kSubmitTaskRsp = 2,
 
-  // Labor连接Scheduler
+  // Labor connect to the Scheduler when startup
   kAttachLabor = 3,
   kAttachLaborRsp = 4,
 
-  // 推送评分矩阵
+  // Scheduler push RatingMatrix(Dataset) to Labors
   kPushRate = 5,
   kPushRateRsp = 6,
 
-  // 推送固定向量
+  // Scheduler push the fixed factors to Labors
   kPushFixed = 7,
   kPushFixedRsp = 8,
 
-  // 迭代进行矩阵分解计算
+  // do the calculate task
   kCalc = 9,
   kCalcRsp = 10,
 
-  // 当业务校验失败(比如taskid和epchoid不匹配等)返回
-  kErrorRsp = 11,
+  // Scheduler send to labor, the labor response with its local info
+  kHeartBeat = 11,
+
+  // When labor recived kHeartBeat, or some error detected, then it send back
+  // Scheduler with its local info
+  kInfoRsp = 12,
 
   kUnspecified = 100,
 };
@@ -81,22 +85,25 @@ struct Head {
       length(0) {
   }
 
-  uint16_t magic;  // "MF"
-  uint8_t version; // 1
-  uint8_t opcode;  // 当前消息类型
+  uint16_t magic;   // "MF"
+  uint8_t version;  // 1
+  uint8_t opcode;   // indicate current message type
 
-  uint32_t taskid;  // 任务ID
-  uint32_t epchoid; // epcho迭代ID
+  uint32_t taskid;  // 
+  uint32_t epchoid; // 
 
-  // 为了高效传输，数据已经不能保证架构无关的了 ...
+  //
+  // ! accouting for the performance and efficiency, not all the data
+  // ! are platform independent, we recommend to use this cluster on
+  // ! the same architecture is possible
 
   uint32_t nfactors;
-  uint32_t bucket; // Calc时候计算对应的分片
+  uint32_t bucket;  // the bucket index number splitted
 
-  double lambda;     // regulation lambda
+  double lambda;    // regulation lambda
   double confidence; // confidence weight
 
-  uint64_t length; // playload length ( NOT include header)
+  uint64_t length;  // playload length ( NOT include header)
 
   std::string dump() const {
     char msg[256]{};
@@ -109,6 +116,7 @@ struct Head {
     return msg;
   }
 
+  // use them for simplify the debug log
   std::string stepinfo() const {
     char msg[256]{};
     ::snprintf(msg, sizeof(msg), "{taskid:%0x, epchoid:%0x, bucket:%0x}",
@@ -116,7 +124,7 @@ struct Head {
     return msg;
   }
 
-  // 网络大端字节序
+  // when received from network, transmit to local machine
   void from_net_endian() {
     magic = be16toh(magic);
     version = version;
@@ -130,6 +138,7 @@ struct Head {
     length = be64toh(length);
   }
 
+  // called before send to the remote
   void to_net_endian() {
     magic = htobe16(magic);
     version = version;

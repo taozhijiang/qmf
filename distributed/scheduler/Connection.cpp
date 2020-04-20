@@ -33,10 +33,10 @@ bool Connection::event() {
     if (head_idx_ < kHeadSize) {
       int len = ::read(socket_, ptr + head_idx_, kHeadSize - head_idx_);
       if (len == -1) {
-        LOG(ERROR) << "read head failed for " << self();
+        LOG(ERROR) << "read head failed for " << addr();
         return false;
       } else if (len == 0) {
-        LOG(ERROR) << "peer closed " << self();
+        LOG(ERROR) << "peer closed " << addr();
         return false;
       }
 
@@ -56,7 +56,7 @@ bool Connection::event() {
       return false;
     }
 
-    VLOG(3) << "read head successful, transmit to  kBody: " << self();
+    VLOG(3) << "read head successful, transmit to  kBody: " << addr();
     stage_ = Stage::kBody;
     return handle_head();
 
@@ -77,10 +77,10 @@ bool Connection::event() {
 
       int len = ::read(socket_, ptr + data_idx_, head_.length - data_idx_);
       if (len == -1) {
-        LOG(ERROR) << "read data failed for " << self();
+        LOG(ERROR) << "read data failed for " << addr();
         return false;
       } else if (len == 0) {
-        LOG(ERROR) << "peer closed " << self();
+        LOG(ERROR) << "peer closed " << addr();
         return false;
       }
 
@@ -92,7 +92,7 @@ bool Connection::event() {
         return true;
       }
 
-      VLOG(3) << "read head successful, transmit to  kDone: " << self();
+      VLOG(3) << "read head successful, transmit to  kDone: " << addr();
       stage_ = Stage::kDone;
       return handle_body();
     }
@@ -115,7 +115,7 @@ bool Connection::handle_head() {
   case static_cast<int>(OpCode::kPushRateRsp):
   case static_cast<int>(OpCode::kPushFixedRsp):
   case static_cast<int>(OpCode::kCalcRsp):
-  case static_cast<int>(OpCode::kErrorRsp):
+  case static_cast<int>(OpCode::kInfoRsp):
     break;
 
   case static_cast<int>(OpCode::kSubmitTaskRsp):
@@ -123,6 +123,7 @@ bool Connection::handle_head() {
   case static_cast<int>(OpCode::kPushRate):
   case static_cast<int>(OpCode::kPushFixed):
   case static_cast<int>(OpCode::kCalc):
+  case static_cast<int>(OpCode::kHeartBeat):
   default:
     LOG(FATAL) << "invalid OpCode received from scheduler:"
                << static_cast<int>(head_.opcode);
@@ -136,6 +137,8 @@ bool Connection::handle_head() {
 bool Connection::handle_body() {
 
   bool retval = true;
+
+  this->touch();
   switch (head_.opcode) {
 
   case static_cast<int>(OpCode::kSubmitTask): {
@@ -199,8 +202,8 @@ bool Connection::handle_body() {
 
     if (message == "OK") {
       LOG(INFO) << "kPushRateRsp return OK, update our status";
-      task_id_ = head_.taskid;
-      epcho_id_ = head_.epchoid;
+      taskid_ = head_.taskid;
+      epchoid_ = head_.epchoid;
     }
     reset();
     break;
@@ -213,8 +216,8 @@ bool Connection::handle_body() {
 
     if (message == "OK") {
       LOG(INFO) << "kPushFixedRsp return OK, update our status";
-      task_id_ = head_.taskid;
-      epcho_id_ = head_.epchoid;
+      taskid_ = head_.taskid;
+      epchoid_ = head_.epchoid;
     }
     reset();
     break;
@@ -240,6 +243,9 @@ bool Connection::handle_body() {
 
       // 拷贝到区域，更新 bucket_bits_
 
+      char* dest = nullptr;
+      uint64_t len = 0;
+
       bool iterate_user = bigdata_ptr->epchoid() % 2;
       if (iterate_user) {
 
@@ -249,22 +255,16 @@ bool Connection::handle_body() {
 
         // 回传 user factors 结果
         const qmf::Matrix& matrix = bigdata_ptr->user_factor_ptr_->getFactors();
-        char* dat = reinterpret_cast<char*>(
+        dest = reinterpret_cast<char*>(
           const_cast<qmf::Matrix&>(matrix).data(start_idx));
-        uint64_t len =
-          (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
+        len = (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
 
         if (len != head_.length) {
           LOG(ERROR) << "length check failed, expect " << len << ", but get "
                      << head_.length;
+          dest = nullptr;
           break;
         }
-
-        ::memcpy(dat, data_.data(), head_.length);
-        bigdata_ptr->bucket_bits_[head_.bucket] = true;
-        LOG(INFO) << "handle task " << head_.taskid << " epcho "
-                  << head_.epchoid << " bucket " << head_.bucket
-                  << " successfully!";
 
       } else {
 
@@ -274,22 +274,28 @@ bool Connection::handle_body() {
 
         // 回传 user factors 结果
         const qmf::Matrix& matrix = bigdata_ptr->item_factor_ptr_->getFactors();
-        char* dat = reinterpret_cast<char*>(
+        dest = reinterpret_cast<char*>(
           const_cast<qmf::Matrix&>(matrix).data(start_idx));
-        uint64_t len =
-          (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
+        len = (end_idx - start_idx) * sizeof(qmf::Double) * head_.nfactors;
 
         if (len != head_.length) {
           LOG(ERROR) << "length check failed, expect " << len << ", but get "
                      << head_.length;
+          dest = nullptr;
           break;
         }
+      }
 
-        ::memcpy(dat, data_.data(), head_.length);
+      if (dest && len) {
+
+        // this bucket calculate successfully, we update the time cost to
+        // the bigdata for stale estimate.
+
+        ::memcpy(dest, data_.data(), len);
         bigdata_ptr->bucket_bits_[head_.bucket] = true;
-        LOG(INFO) << "handle task " << head_.taskid << " epcho "
-                  << head_.epchoid << " bucket " << head_.bucket
-                  << " successfully!";
+        time_t cost = ::time(NULL) - bucket_start_;
+        LOG(INFO) << "bucket calculate task " << head_.stepinfo()
+                  << " successfully, time cost " << cost << " secs. ";
       }
 
     } while (0);
@@ -298,7 +304,7 @@ bool Connection::handle_body() {
     break;
   }
 
-  case static_cast<int>(OpCode::kErrorRsp): {
+  case static_cast<int>(OpCode::kInfoRsp): {
 
     // 正常情况下，Scheduler开始计算的时候，都会将评价矩阵和每一轮
     // 的FixedFactor发送给所有Labor，然后再开始分片计算，但是如果
@@ -317,12 +323,12 @@ bool Connection::handle_body() {
                   << ", update it with " << bigdata_ptr->taskid();
 
         if (lock_socket_.test_and_set()) {
-          LOG(INFO) << "connection socket used by other ..." << self();
+          LOG(INFO) << "connection socket used by other ..." << addr();
           break;
         }
 
         VLOG(3) << "== LUCKY resent task " << bigdata_ptr->taskid()
-                << " rating to remote " << self();
+                << " rating to remote " << addr();
 
         const auto& dataset = bigdata_ptr->rating_vec_;
         const char* dat = reinterpret_cast<const char*>(dataset.data());
@@ -332,7 +338,7 @@ bool Connection::handle_body() {
               socket_, OpCode::kPushRate, dat, len, bigdata_ptr->taskid(),
               bigdata_ptr->epchoid(), bigdata_ptr->nfactors(), 0,
               bigdata_ptr->lambda(), bigdata_ptr->confidence())) {
-          LOG(ERROR) << "fallback sending rating to " << self() << " failed.";
+          LOG(ERROR) << "fallback sending rating to " << addr() << " failed.";
         }
 
         lock_socket_.clear();
@@ -344,13 +350,13 @@ bool Connection::handle_body() {
                   << ", update it with " << bigdata_ptr->epchoid();
 
         if (lock_socket_.test_and_set()) {
-          LOG(INFO) << "connection socket used by other ..." << self();
+          LOG(INFO) << "connection socket used by other ..." << addr();
           break;
         }
 
         VLOG(3) << "== LUCKY resent fixedfactor " << bigdata_ptr->taskid()
                 << ":" << bigdata_ptr->epchoid() << " rating to remote "
-                << self();
+                << addr();
 
         const char* dat = nullptr;
         uint64_t len = 0;
@@ -378,14 +384,15 @@ bool Connection::handle_body() {
               socket_, OpCode::kPushFixed, dat, len, bigdata_ptr->taskid(),
               bigdata_ptr->epchoid(), bigdata_ptr->nfactors(), 0,
               bigdata_ptr->lambda(), bigdata_ptr->confidence())) {
-          LOG(ERROR) << "fallback sending fixed to " << self() << " failed.";
+          LOG(ERROR) << "fallback sending fixed to " << addr() << " failed.";
         }
 
         lock_socket_.clear();
 
       } else {
 
-        LOG(FATAL) << "undeteced error.";
+        // GOOD, latest info for this connection.
+
       }
 
     } while (0);
@@ -399,8 +406,9 @@ bool Connection::handle_body() {
   case static_cast<int>(OpCode::kPushRate):
   case static_cast<int>(OpCode::kPushFixed):
   case static_cast<int>(OpCode::kCalc):
+  case static_cast<int>(OpCode::kHeartBeat):
   default:
-    LOG(FATAL) << "invalid OpCode received from scheduler:"
+    LOG(FATAL) << "invalid OpCode received by Scheduler:"
                << static_cast<int>(head_.opcode);
     retval = false;
     break;

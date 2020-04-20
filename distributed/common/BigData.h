@@ -13,7 +13,8 @@
 #include <bitset> // std::bitset
 
 #include <qmf/DatasetReader.h>
-// Matrix内部是std::vector<Double>存储的！
+
+// Matrix use std::vector<Double> for internal storage
 #include <qmf/Matrix.h>
 #include <qmf/FactorData.h>
 
@@ -22,7 +23,6 @@
 
 namespace distributed {
 
-// 每一个任务、每一轮迭代的时候都需要更新
 struct BigData {
 
   // TODO: dynamic create task_bits for performance
@@ -62,7 +62,7 @@ struct BigData {
     return ++epchoid_;
   }
 
-  // 用户评价矩阵
+  // user rating matrix, also unknown as dataset
   std::vector<qmf::DatasetElem> rating_vec_;
 
   // epcho_id_ = 1, 3, 5, ... fix item, cal user
@@ -75,8 +75,8 @@ struct BigData {
   // used in scheduler
   bucket_bits_type bucket_bits_;
 
-  // reset for new task
-  // called from scheduler
+  // reset actin for new task
+  // called by Scheduler
   void start_term(uint32_t nfactors, double lambda, double confidence) {
 
     ++taskid_;
@@ -89,7 +89,7 @@ struct BigData {
     bucket_bits_.reset();
   }
 
-  // called from labor
+  // called by Labor, update local info
   void set_param(const Head& head) {
 
     taskid_ = head.taskid;
@@ -100,14 +100,13 @@ struct BigData {
   }
 
  private:
-  // 因为这里涉及到和上面数据的一致性，所以还是私有化
-  // 只在特定的接口中修改
-  uint32_t taskid_;  // 任务ID
-  uint32_t epchoid_; // epcho迭代ID
+  uint32_t taskid_;
+  uint32_t epchoid_;
 
   uint32_t nfactors_;
   double lambda_;     // regulation lambda
   double confidence_; // confidence weight
+  
 };
 
 } // end namespace distributed

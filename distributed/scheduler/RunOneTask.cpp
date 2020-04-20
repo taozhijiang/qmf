@@ -73,7 +73,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     std::uniform_real_distribution<qmf::Double> distr(
       -taskdef->init_distribution_bound(), taskdef->init_distribution_bound());
     auto genUnif = [&distr, &gen](auto...) { return distr(gen); };
-    
+
     // we don't need to initialize user factors
     bigdata_ptr_->item_factor_ptr_->setFactors(genUnif);
     LOG(INFO) << "initialize items factors with random.";
@@ -87,23 +87,26 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
 
   // step 3. push rating matrix to all labors
 
+  // at least more than half Labors should available
   const size_t kStartConnectionCount = connections_count();
-  LOG(INFO) << "current active labor: " << kStartConnectionCount;
+  const size_t kQuorumsConnectionCount = kStartConnectionCount / 2 + 1;
+  LOG(INFO) << "current total Labor count " << kStartConnectionCount
+            << ", at least available Labor: " << kQuorumsConnectionCount;
 
-  if (!push_all_rating()) {
+  if (!push_all_rating_matrix()) {
     LOG(ERROR) << "scheduler push rating matrix to all labor failed.";
     return false;
   }
 
   size_t rate_count = 0;
-  while ((rate_count = connections_count(true)) < kStartConnectionCount) {
+  while ((rate_count = connections_count(true)) < kQuorumsConnectionCount) {
 
     LOG(INFO) << "waiting ... current rateload labor count " << rate_count
-              << ", expect " << kStartConnectionCount;
+              << ", expect at least " << kStartConnectionCount;
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
 
-  // step 4. 执行迭代
+  // step 4. iterate to do the m.f.
   size_t fixed_count = 0;
   for (size_t i = 0; i < taskdef->nepochs(); ++i) {
 
@@ -111,16 +114,15 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     push_all_fixed_factors();
 
     // waiting all FixedLoad
-    while ((fixed_count = connections_count(true)) < kStartConnectionCount) {
+    while ((fixed_count = connections_count(true)) < kQuorumsConnectionCount) {
 
       LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
-                << ", expect " << kStartConnectionCount;
+                << ", expect at least " << kQuorumsConnectionCount;
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    // calc
     LOG(INFO) << "begin iterate users factors ...";
-    if (!do_iterate_factors()) {
+    if (!iterate_factors()) {
       LOG(ERROR) << "task " << bigdata_ptr_->taskid() << ":"
                  << bigdata_ptr_->epchoid()
                  << " iterate users factors failed!!!";
@@ -131,16 +133,15 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     push_all_fixed_factors();
 
     // waiting all FixedLoad
-    while ((fixed_count = connections_count(true)) < kStartConnectionCount) {
+    while ((fixed_count = connections_count(true)) < kQuorumsConnectionCount) {
 
       LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
-                << ", expect " << kStartConnectionCount;
+                << ", expect at least " << kQuorumsConnectionCount;
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    // calc
     LOG(INFO) << "begin iterate items factors ...";
-    if (!do_iterate_factors()) {
+    if (!iterate_factors()) {
       LOG(ERROR) << "task " << bigdata_ptr_->taskid() << ":"
                  << bigdata_ptr_->epchoid()
                  << " iterate items factors failed!!!";
@@ -148,7 +149,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     }
   }
 
-  // step 5. 保存
+  // step 5. save the result to fs
   LOG(INFO) << "saving user_factors and item_factors ";
   engine_ptr_->saveUserFactors(taskdef->user_factors());
   engine_ptr_->saveItemFactors(taskdef->item_factors());
@@ -156,7 +157,7 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
   return true;
 }
 
-bool Scheduler::do_iterate_factors() {
+bool Scheduler::iterate_factors() {
 
   bool iterate_user = bigdata_ptr_->epchoid() % 2;
 
@@ -181,10 +182,22 @@ bool Scheduler::do_iterate_factors() {
 
       // find available labor
       auto connection = iter->second;
-      if (!connection->is_labor_ || connection->is_calculating_)
+      if (!connection->is_labor_)
         continue;
 
-      VLOG(3) << "found avail labor: " << connection->self();
+      // check whether stale, and need to kHeartBeat
+      if (connection->is_busy_) {
+
+        time_t timeout = kHeartBeatInternal;
+        if (connection->is_stale(timeout)) {
+          connection->touch();
+          push_heartbeat(connection);
+          LOG(INFO) << "connection " << connection->addr() << " is stale for "
+                    << timeout << " seconds, send kHeartBeat message.";
+        }
+
+        continue;
+      }
 
       // find the unfinished bucket
       while (bigdata_ptr_->bucket_bits_[index] &&
@@ -200,8 +213,10 @@ bool Scheduler::do_iterate_factors() {
 
       if (!bigdata_ptr_->bucket_bits_[index]) {
 
-        push_calc_bucket(index, connection->socket_);
-        connection->is_calculating_ = true;
+        connection->touch();
+        connection->bucket_start_ = ::time(NULL);
+        push_bucket(index, connection->socket_);
+        connection->is_busy_ = true;
 
         index = (index + 1) % bucket_number;
       }

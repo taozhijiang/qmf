@@ -222,7 +222,7 @@ void Scheduler::handle_read(int socket) {
   }
 }
 
-bool Scheduler::push_all_rating() {
+bool Scheduler::push_all_rating_matrix() {
 
   connections_ptr_type copy_connections = share_connections_ptr();
 
@@ -240,7 +240,7 @@ bool Scheduler::push_all_rating() {
       continue;
 
     if (connection->lock_socket_.test_and_set()) {
-      LOG(INFO) << "connection socket used by other ..." << connection->self();
+      LOG(INFO) << "connection socket used by other ..." << connection->addr();
       continue;
     }
 
@@ -249,11 +249,12 @@ bool Scheduler::push_all_rating() {
     const char* dat = reinterpret_cast<const char*>(dataset.data());
     uint64_t len = sizeof(dataset[0]) * dataset.size();
 
+    connection->touch();
     if (!SendOps::send_bulk(connection->socket_, OpCode::kPushRate, dat, len,
                             bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
                             bigdata_ptr_->nfactors(), 0, bigdata_ptr_->lambda(),
                             bigdata_ptr_->confidence())) {
-      LOG(ERROR) << "sending rating to " << connection->self() << " failed.";
+      LOG(ERROR) << "sending rating to " << connection->addr() << " failed.";
     }
 
     connection->lock_socket_.clear();
@@ -280,7 +281,7 @@ bool Scheduler::push_all_fixed_factors() {
       continue;
 
     if (connection->lock_socket_.test_and_set()) {
-      LOG(INFO) << "connection socket used by other ..." << connection->self();
+      LOG(INFO) << "connection socket used by other ..." << connection->addr();
       continue;
     }
 
@@ -305,11 +306,13 @@ bool Scheduler::push_all_fixed_factors() {
                 << " will transform userFactors with size " << len;
     }
 
+    connection->touch();
     if (!SendOps::send_bulk(connection->socket_, OpCode::kPushFixed, dat, len,
                             bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
                             bigdata_ptr_->nfactors(), 0, bigdata_ptr_->lambda(),
                             bigdata_ptr_->confidence())) {
-      LOG(ERROR) << "sending fixed to " << connection->self() << " failed.";
+      LOG(ERROR) << "sending fixed factors to " << connection->addr()
+                 << " failed.";
     }
 
     connection->lock_socket_.clear();
@@ -318,7 +321,7 @@ bool Scheduler::push_all_fixed_factors() {
   return true;
 }
 
-bool Scheduler::push_calc_bucket(uint32_t bucket_idx, int socketfd) {
+bool Scheduler::push_bucket(uint32_t bucket_idx, int socketfd) {
 
   const char* msg = "CA";
   if (!SendOps::send_bulk(socketfd, OpCode::kCalc, msg, 2,
@@ -330,6 +333,19 @@ bool Scheduler::push_calc_bucket(uint32_t bucket_idx, int socketfd) {
   }
 
   return true;
+}
+
+void Scheduler::push_heartbeat(std::shared_ptr<Connection>& connection) {
+
+  const char* msg = "HB";
+
+  connection->touch();
+  if (!SendOps::send_bulk(connection->socket_, OpCode::kHeartBeat, msg, 2,
+                          bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
+                          bigdata_ptr_->nfactors(), 0, bigdata_ptr_->lambda(),
+                          bigdata_ptr_->confidence())) {
+    LOG(ERROR) << "sending heartbeat to " << connection->addr() << " failed.";
+  }
 }
 
 size_t Scheduler::connections_count(bool check) {
@@ -346,9 +362,20 @@ size_t Scheduler::connections_count(bool check) {
 
     if (!check) {
       ++count;
-    } else if (connection->task_id_ == bigdata_ptr_->taskid() &&
-               connection->epcho_id_ == bigdata_ptr_->epchoid()) {
+    } else if (connection->taskid_ == bigdata_ptr_->taskid() &&
+               connection->epchoid_ == bigdata_ptr_->epchoid()) {
       ++count;
+    } else {
+
+      // need check, but connection status is old
+      // stale detection
+      time_t timeout = kHeartBeatInternal;
+      if (connection->is_stale(timeout)) {
+        connection->touch();
+        push_heartbeat(connection);
+        LOG(INFO) << "connection " << connection->addr() << " is stale for "
+                  << timeout << " seconds, send kHeartBeat message.";
+      }
     }
   }
 

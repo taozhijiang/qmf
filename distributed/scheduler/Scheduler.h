@@ -68,11 +68,17 @@ class Scheduler {
  private:
   void handle_read(int socket);
 
-  // 数据推送
-  bool push_all_rating();
+  // Scheduler will ONLY push rating matrix and fixed factors to ALL Labors only
+  // once in RunOnceTask procedure, and when error occurs, Scheduler will only
+  // send kHeartBeat request to specific Labor, and their KInfoRsp response will
+  // trigger lastest sendback actions.
+  bool push_all_rating_matrix();
   bool push_all_fixed_factors();
-  bool push_calc_bucket(uint32_t bucket_idx, int socketfd);
-  bool do_iterate_factors();
+  void push_heartbeat(std::shared_ptr<Connection>& connection);
+  bool push_bucket(uint32_t bucket_idx, int socketfd);
+
+  // This is the core bucket distribution algorithm, improve it!
+  bool iterate_factors();
 
   // 只检查所有可用的labor数目
   // check为true，则校验taskid和epcho相匹配的labor数目

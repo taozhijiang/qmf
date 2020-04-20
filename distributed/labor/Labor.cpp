@@ -82,7 +82,7 @@ bool Labor::start_connect() {
       break;
     }
 
-    // connect
+    // connect to the Scheduler
     if (::connect(socketfd_, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) <
         0) {
       LOG(ERROR) << "connect to " << addr_ << ":" << port_ << " failed.";
@@ -177,11 +177,30 @@ bool Labor::handle_head() {
   bool retval = true;
   switch (head_.opcode) {
 
+  case static_cast<int>(OpCode::kHeartBeat): {
+
+    // Send back our latest local info to the Scheduler
+
+    VLOG(3) << "dump OpCode::kHeartBeat head " << std::endl << head_.dump();
+
+    RecvOps::recv_and_drop(socketfd_, head_.length);
+
+    if (!SendOps::send_bulk(socketfd_, OpCode::kInfoRsp, OK, strlen(OK),
+                            bigdata_ptr_->taskid(), bigdata_ptr_->epchoid())) {
+      LOG(ERROR) << "send OpCode::kInfoRsp failed.";
+    }
+
+    break;
+  }
+
   case static_cast<int>(OpCode::kPushRate): {
 
-    // 无论何时，Labor收到kPushRate都直接更新本地数据
+    // The Scheduler push RatingMatrix(Dataset) to us
+    //
+    // ! Anyway, we will update our local dataset when received the kPushRate
+    // ! message anytime.
 
-    VLOG(3) << "OpCode::kPushRate head " << std::endl << head_.dump();
+    VLOG(3) << "dump OpCode::kPushRate head " << std::endl << head_.dump();
 
     int64_t item_sz = head_.length / sizeof(qmf::DatasetElem);
     bigdata_ptr_->rating_vec_.resize(item_sz);
@@ -238,10 +257,10 @@ bool Labor::handle_head() {
 
       RecvOps::recv_and_drop(socketfd_, head_.length);
 
-      if (!SendOps::send_bulk(socketfd_, OpCode::kErrorRsp, FAIL, strlen(FAIL),
+      if (!SendOps::send_bulk(socketfd_, OpCode::kInfoRsp, FAIL, strlen(FAIL),
                               bigdata_ptr_->taskid(),
                               bigdata_ptr_->epchoid())) {
-        LOG(ERROR) << "send OpCode::kErrorRsp failed.";
+        LOG(ERROR) << "send OpCode::kInfoRsp failed.";
       }
       break;
     }
@@ -313,10 +332,10 @@ bool Labor::handle_head() {
                  << head_.taskid << ":" << head_.epchoid;
 
       RecvOps::recv_and_drop(socketfd_, head_.length);
-      if (!SendOps::send_bulk(socketfd_, OpCode::kErrorRsp, FAIL, strlen(FAIL),
+      if (!SendOps::send_bulk(socketfd_, OpCode::kInfoRsp, FAIL, strlen(FAIL),
                               bigdata_ptr_->taskid(),
                               bigdata_ptr_->epchoid())) {
-        LOG(ERROR) << "send OpCode::kErrorRsp failed.";
+        LOG(ERROR) << "send OpCode::kInfoRsp failed.";
       }
       break;
     }
@@ -387,8 +406,9 @@ bool Labor::handle_head() {
   case static_cast<int>(OpCode::kPushRateRsp):
   case static_cast<int>(OpCode::kPushFixedRsp):
   case static_cast<int>(OpCode::kCalcRsp):
+  case static_cast<int>(OpCode::kInfoRsp):
   default:
-    LOG(FATAL) << "invalid OpCode received from scheduler:"
+    LOG(FATAL) << "invalid OpCode received by Labor:"
                << static_cast<int>(head_.opcode);
     retval = false;
     break;

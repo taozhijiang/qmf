@@ -8,6 +8,11 @@
 #ifndef __DISTRIBUTED_COMMON_EQUEUE_H__
 #define __DISTRIBUTED_COMMON_EQUEUE_H__
 
+/**
+ * This is a simple task-queue based on std::deque
+ * it use mutex for thread-safe, and conditiona_variable for effective notify
+ */
+
 #include <vector>
 #include <deque>
 
@@ -62,7 +67,8 @@ class EQueue {
   size_t POP(std::vector<T>& vec, size_t max_count, uint64_t msec) {
     std::unique_lock<std::mutex> lock(lock_);
 
-    // 因为wait_for可能会被伪唤醒，所以这里还是wait_until比较好
+    // because wait_for may have spurious problem, so here we use wait_until
+    // instead.
 
     auto now = std::chrono::system_clock::now();
     auto expire_tp = now + std::chrono::milliseconds(msec);

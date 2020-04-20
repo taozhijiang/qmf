@@ -70,10 +70,16 @@ class Connection {
              const std::string& addr,
              int port,
              int socket)
-    : scheduler_(scheduler), addr_(addr), port_(port), socket_(socket) {
+    : scheduler_(scheduler),
+      addr_(addr),
+      port_(port),
+      socket_(socket),
+      taskid_(0),
+      epchoid_(0) {
 
     stage_ = Stage::kHead;
     head_idx_ = 0;
+    timestamp_ = ::time(NULL);
   }
 
   // critical error return false;
@@ -82,19 +88,29 @@ class Connection {
   bool handle_head();
   bool handle_body();
 
-  std::string self() const {
+  std::string addr() const {
     std::stringstream ss;
     ss << "(" << socket_ << ") " << addr_ << ":" << port_;
     return ss.str();
   }
 
   void reset() {
-    
+
     head_idx_ = 0;
     data_idx_ = 0;
 
     stage_ = Stage::kHead;
-    is_calculating_ = false;
+    is_busy_ = false;
+  }
+
+  // when Labor has some problem and Scheduler need compute resources, the
+  // Scheduler will check this and send kHeartBeat if need.
+  void touch() {
+    timestamp_ = ::time(NULL);
+  }
+
+  bool is_stale(time_t period) {
+    return ::time(NULL) - timestamp_ > period;
   }
 
  public:
@@ -105,23 +121,29 @@ class Connection {
   const int port_;
   const int socket_;
   std::atomic_flag lock_socket_ = ATOMIC_FLAG_INIT;
+  // latest action of this connection
+  time_t timestamp_;
+  time_t bucket_start_;
 
-  // 是否已经分配计算了，不需要状态强一致性
-  bool is_calculating_ = false;
+  // indicats when the corresponding Labor has already been distributed a
+  // calcuate task
+  bool is_busy_ = false;
 
  private:
-  // 因为submit工具的socket也在这里，所以这里区分是否是Labor
-  // 免得Scheduler误发数据
+  // because of the Scheduler uniform "select" designe, the wals_submit will
+  // also be legal client, we should avoid send task to them even just in some
+  // critical case
   bool is_labor_ = false;
 
-  // 废弃Status参数，使用 task_id 和 epcho_id 就能够唯一确定labor的状态了
-  uint32_t task_id_ = 0;
-  uint32_t epcho_id_ = 0;
+  // the taskid_ and epchoid_ somehow indicates the client's status, but
+  // remember in distributed situation, it is not in strong consensus.
+  uint32_t taskid_ = 0;
+  uint32_t epchoid_ = 0;
 
   enum class Stage {
-    kHead = 1, // 读取头阶段
-    kBody = 2, // 读取Body阶段
-    kDone = 3, // 等待处理数据
+    kHead = 1, // in reading head period
+    kBody = 2, // in reading body period
+    kDone = 3, // already processed
   } stage_;
 
   Head head_;
