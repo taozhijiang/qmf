@@ -21,7 +21,7 @@ const size_t kBucketBits = 10000; //1亿的user/item维度，可以了吧
 const size_t kTrivalMsgSize = 128;
 
 // force to send kHeartBeat
-const time_t kHeartBeatInternal = 60;
+const time_t kHeartBeatInternal = 30;
 
 } // end namespace distributed
 

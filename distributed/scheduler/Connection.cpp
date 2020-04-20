@@ -215,7 +215,7 @@ bool Connection::handle_body() {
     VLOG(3) << "kPushFixedRsp recv with " << message;
 
     if (message == "OK") {
-      LOG(INFO) << "kPushFixedRsp return OK, update our status";
+      LOG(INFO) << "kPushFixedRsp OK from " << addr() << ", update our status";
       taskid_ = head_.taskid;
       epchoid_ = head_.epchoid;
     }

@@ -211,15 +211,24 @@ bool Scheduler::iterate_factors() {
               << bigdata_ptr_->bucket_bits_.count() << ", total "
               << bucket_number;
 
+      if (connection->lock_socket_.test_and_set()) {
+        LOG(INFO) << "selected connection socket used by other ..."
+                  << connection->addr();
+        continue;
+      }
+
       if (!bigdata_ptr_->bucket_bits_[index]) {
 
-        connection->touch();
-        connection->bucket_start_ = ::time(NULL);
-        push_bucket(index, connection->socket_);
-        connection->is_busy_ = true;
-
-        index = (index + 1) % bucket_number;
+        // we may push failed, for socket lock problem
+        if (push_bucket(index, connection->socket_)) {
+          connection->touch();
+          connection->bucket_start_ = ::time(NULL);
+          connection->is_busy_ = true;
+          index = (index + 1) % bucket_number;
+        }
       }
+
+      connection->lock_socket_.clear();
 
       if (bigdata_ptr_->bucket_bits_.count() == bucket_number) {
         LOG(INFO) << "iterate done!";

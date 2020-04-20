@@ -295,15 +295,17 @@ bool Scheduler::push_all_fixed_factors() {
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "epcho_id " << bigdata_ptr_->epchoid()
-                << " will transform itemFactors with size " << len;
+      LOG(INFO) << "{taskid:" << bigdata_ptr_->taskid() << ", epchoid:"
+                << bigdata_ptr_->epchoid()
+                << "} transform itemFactors with size " << len;
     } else {
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "epcho_id " << bigdata_ptr_->epchoid()
-                << " will transform userFactors with size " << len;
+      LOG(INFO) << "{taskid:" << bigdata_ptr_->taskid() << ", epchoid:"
+                << bigdata_ptr_->epchoid()
+                << "} transform userFactors with size " << len;
     }
 
     connection->touch();
@@ -339,6 +341,11 @@ void Scheduler::push_heartbeat(std::shared_ptr<Connection>& connection) {
 
   const char* msg = "HB";
 
+  if (connection->lock_socket_.test_and_set()) {
+    LOG(INFO) << "connection socket used by other ..." << connection->addr();
+    return;
+  }
+
   connection->touch();
   if (!SendOps::send_bulk(connection->socket_, OpCode::kHeartBeat, msg, 2,
                           bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
@@ -346,6 +353,8 @@ void Scheduler::push_heartbeat(std::shared_ptr<Connection>& connection) {
                           bigdata_ptr_->confidence())) {
     LOG(ERROR) << "sending heartbeat to " << connection->addr() << " failed.";
   }
+
+  connection->lock_socket_.clear();
 }
 
 size_t Scheduler::connections_count(bool check) {
@@ -371,7 +380,6 @@ size_t Scheduler::connections_count(bool check) {
       // stale detection
       time_t timeout = kHeartBeatInternal;
       if (connection->is_stale(timeout)) {
-        connection->touch();
         push_heartbeat(connection);
         LOG(INFO) << "connection " << connection->addr() << " is stale for "
                   << timeout << " seconds, send kHeartBeat message.";
