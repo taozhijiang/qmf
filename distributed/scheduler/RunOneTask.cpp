@@ -43,23 +43,24 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
                            taskdef->regularization_lambda(),
                            taskdef->confidence_weight());
 
-  // step 1. 加载train_set数据
+  // step 1. load train set
 
   LOG(INFO) << "loading training dataset";
   qmf::DatasetReader trainReader(taskdef->train_set());
   trainReader.readAll(bigdata_ptr_->rating_vec_);
   if (bigdata_ptr_->rating_vec_.empty()) {
-    LOG(ERROR) << "load training dataset empty: " << taskdef->train_set();
+    LOG(ERROR) << "training dataset empty: " << taskdef->train_set();
     return false;
   }
-  LOG(INFO) << "load training datset size: "
+  LOG(INFO) << "total training dataset size: "
             << bigdata_ptr_->rating_vec_.size();
 
+  // this will build users/items index
   engine_ptr_->init();
   LOG(INFO) << "detected item count: " << engine_ptr_->nitems();
   LOG(INFO) << "detected user count: " << engine_ptr_->nusers();
 
-  // step 2. 初始化uniform
+  // step 2. uniform the fixed factors
   bigdata_ptr_->item_factor_ptr_ = std::make_shared<qmf::FactorData>(
     engine_ptr_->nitems(), taskdef->nfactors());
   bigdata_ptr_->user_factor_ptr_ = std::make_shared<qmf::FactorData>(
@@ -72,18 +73,19 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     std::uniform_real_distribution<qmf::Double> distr(
       -taskdef->init_distribution_bound(), taskdef->init_distribution_bound());
     auto genUnif = [&distr, &gen](auto...) { return distr(gen); };
-    // don't need to initialize user factors
+    
+    // we don't need to initialize user factors
     bigdata_ptr_->item_factor_ptr_->setFactors(genUnif);
-    LOG(INFO) << "initialize item factors with random.";
+    LOG(INFO) << "initialize items factors with random.";
 
   } else {
 
     bigdata_ptr_->item_factor_ptr_->setFactors(taskdef->distribution_file());
-    LOG(INFO) << "initialize item factors with file: "
+    LOG(INFO) << "initialize items factors with static file: "
               << taskdef->distribution_file();
   }
 
-  // step 3. push rating 给所有的labor
+  // step 3. push rating matrix to all labors
 
   const size_t kStartConnectionCount = connections_count();
   LOG(INFO) << "current active labor: " << kStartConnectionCount;
@@ -162,14 +164,14 @@ bool Scheduler::do_iterate_factors() {
   if (iterate_user) {
     bucket_number = (engine_ptr_->nusers() + kBucketSize - 1) / kBucketSize;
     LOG(INFO) << "users factors count " << engine_ptr_->nusers()
-              << " map to task " << bucket_number;
+              << " mapped to " << bucket_number << " buckets.";
   } else {
     bucket_number = (engine_ptr_->nitems() + kBucketSize - 1) / kBucketSize;
     LOG(INFO) << "items factors count " << engine_ptr_->nusers()
-              << " map to task " << bucket_number;
+              << " mapped to " << bucket_number << " buckets.";
   }
 
-  uint64_t index = 0; // 单调递增的分配索引
+  uint64_t index = 0; // the incr bucket index
 
   while (true) {
 
@@ -177,14 +179,14 @@ bool Scheduler::do_iterate_factors() {
     for (auto iter = copy_connections->begin(); iter != copy_connections->end();
          ++iter) {
 
-      // 查找空闲的 labor
+      // find available labor
       auto connection = iter->second;
       if (!connection->is_labor_ || connection->is_calculating_)
         continue;
 
       VLOG(3) << "found avail labor: " << connection->self();
 
-      // 查找可分配的 bucket
+      // find the unfinished bucket
       while (bigdata_ptr_->bucket_bits_[index] &&
              bigdata_ptr_->bucket_bits_.count() < bucket_number) {
         index = (index + 1) % bucket_number;

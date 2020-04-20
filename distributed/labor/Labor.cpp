@@ -15,6 +15,7 @@
 #include <distributed/labor/Labor.h>
 #include <distributed/common/SendOps.h>
 #include <distributed/common/RecvOps.h>
+#include <distributed/common/NetUtil.h>
 
 #include <glog/logging.h>
 
@@ -56,6 +57,8 @@ bool Labor::start_connect() {
 
   bool success = false;
   do {
+
+    NetUtil::optimize_send_recv_buff(socketfd_);
 
     // If a receive operation has blocked for this much time without receiving
     // additional data, it shall return with a partial count or errno set to
@@ -198,7 +201,7 @@ bool Labor::handle_head() {
     //
     // g++ will complain for "cannot bind packed field to xxx &"
     // copy to avoid it
-    // 
+    //
     auto nfactors = head_.nfactors;
     bigdata_ptr_->item_factor_ptr_ =
       std::make_shared<qmf::FactorData>(engine_ptr_->nitems(), nfactors);
@@ -209,8 +212,7 @@ bool Labor::handle_head() {
     bigdata_ptr_->item_factor_ptr_->setFactors();
     bigdata_ptr_->user_factor_ptr_->setFactors();
 
-    bigdata_ptr_->YtY_ptr_ =
-      std::make_shared<qmf::Matrix>(nfactors, nfactors);
+    bigdata_ptr_->YtY_ptr_ = std::make_shared<qmf::Matrix>(nfactors, nfactors);
 
     if (!SendOps::send_bulk(socketfd_, OpCode::kPushRateRsp, OK, strlen(OK),
                             head_.taskid, head_.epchoid)) {

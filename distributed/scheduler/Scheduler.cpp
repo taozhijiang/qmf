@@ -14,6 +14,7 @@
 #include <chrono> // std::chrono::seconds
 
 #include <distributed/common/SendOps.h>
+#include <distributed/common/NetUtil.h>
 
 #include <glog/logging.h>
 
@@ -67,6 +68,8 @@ bool Scheduler::start_listen() {
       LOG(ERROR) << "reuse address failed: " << ::strerror(errno);
       break;
     }
+
+    NetUtil::optimize_send_recv_buff(socketfd);
 
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
@@ -159,6 +162,8 @@ void Scheduler::select_loop() {
             int port = htons(peer_addr.sin_port);
             LOG(INFO) << "accept new client from " << addr << ":" << port;
 
+            NetUtil::optimize_send_recv_buff(sock);
+
             auto connection =
               std::make_shared<Connection>(*this, addr, port, sock);
             if (connection) {
@@ -177,7 +182,7 @@ void Scheduler::select_loop() {
 
           continue;
         }
-        
+
         // handle normal socket event
         handle_read(ss);
 

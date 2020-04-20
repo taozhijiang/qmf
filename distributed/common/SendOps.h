@@ -48,13 +48,17 @@ class SendOps {
   static bool
     send_message(int socketfd, enum OpCode code, const std::string& msg) {
 
+    char buff[kTrivalMsgSize + kHeadSize]{};
+    LOG_IF(ERROR, msg.size() > kTrivalMsgSize)
+      << "msg size " << msg.size() << " exceed maxium" << kTrivalMsgSize;
+
     Head head(code);
     head.length = msg.size();
     head.to_net_endian();
+    ::memcpy(buff, reinterpret_cast<const char*>(&head), kHeadSize);
+    ::memcpy(buff + kHeadSize, msg.c_str(), msg.size());
 
-    return send_lite(
-             socketfd, reinterpret_cast<const char*>(&head), sizeof(Head)) &&
-           send_lite(socketfd, msg.c_str(), msg.size());
+    return send_lite(socketfd, buff, kHeadSize + msg.size());
   }
 
   static bool send_bulk(int socketfd,

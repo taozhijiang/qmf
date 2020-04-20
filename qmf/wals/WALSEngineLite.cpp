@@ -177,7 +177,7 @@ Double WALSEngineLite::iterate(uint64_t start_index,
   computeXtX(Y, &YtY);
 
 #if defined(__GNUC__)
-  omp_set_num_threads(16);
+//  omp_set_num_threads(16);
 #endif
 
   Double loss = 0.0;
@@ -196,14 +196,16 @@ Double WALSEngineLite::iterate(uint64_t start_index,
     }
   }
 
-  return loss / nusers() / nitems();
+  return loss / Y.nrows() / (end_index - start_index);
 }
 
 void WALSEngineLite::computeXtX(const Matrix& X, Matrix* out) {
 
   // assert X and out samesize
 
-  // omp_set_num_threads(16);
+#if defined(__GNUC__)
+//  omp_set_num_threads(16);
+#endif
 
   const size_t nrows = X.nrows();
   const size_t ncols = X.ncols();

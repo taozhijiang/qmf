@@ -17,6 +17,9 @@ namespace distributed {
 const size_t kBucketSize = 10000;
 const size_t kBucketBits = 10000; //1亿的user/item维度，可以了吧
 
+
+const size_t kTrivalMsgSize = 128;
+
 } // end namespace distributed
 
 #endif // __DISTRIBUTED_COMMON_COMMON_H__
