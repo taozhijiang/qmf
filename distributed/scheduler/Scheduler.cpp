@@ -295,16 +295,16 @@ bool Scheduler::push_all_fixed_factors() {
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "{taskid:" << bigdata_ptr_->taskid() << ", epchoid:"
-                << bigdata_ptr_->epchoid()
+      LOG(INFO) << "{taskid:" << bigdata_ptr_->taskid()
+                << ", epchoid:" << bigdata_ptr_->epchoid()
                 << "} transform itemFactors with size " << len;
     } else {
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
       dat =
         reinterpret_cast<const char*>(const_cast<qmf::Matrix&>(matrix).data());
       len = sizeof(qmf::Matrix::value_type) * matrix.nrows() * matrix.ncols();
-      LOG(INFO) << "{taskid:" << bigdata_ptr_->taskid() << ", epchoid:"
-                << bigdata_ptr_->epchoid()
+      LOG(INFO) << "{taskid:" << bigdata_ptr_->taskid()
+                << ", epchoid:" << bigdata_ptr_->epchoid()
                 << "} transform userFactors with size " << len;
     }
 
@@ -323,13 +323,14 @@ bool Scheduler::push_all_fixed_factors() {
   return true;
 }
 
+// already lock the socketfd outside
 bool Scheduler::push_bucket(uint32_t bucket_idx, int socketfd) {
 
-  const char* msg = "CA";
-  if (!SendOps::send_bulk(socketfd, OpCode::kCalc, msg, 2,
-                          bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
-                          bigdata_ptr_->nfactors(), bucket_idx,
-                          bigdata_ptr_->lambda(), bigdata_ptr_->confidence())) {
+  const std::string msg = "CA";
+  if (!SendOps::send_message(
+        socketfd, OpCode::kCalc, msg, bigdata_ptr_->taskid(),
+        bigdata_ptr_->epchoid(), bigdata_ptr_->nfactors(), bucket_idx,
+        bigdata_ptr_->lambda(), bigdata_ptr_->confidence())) {
     LOG(ERROR) << "sending fixed to " << socketfd << " failed.";
     return false;
   }
@@ -339,7 +340,7 @@ bool Scheduler::push_bucket(uint32_t bucket_idx, int socketfd) {
 
 void Scheduler::push_heartbeat(std::shared_ptr<Connection>& connection) {
 
-  const char* msg = "HB";
+  const std::string msg = "HB";
 
   if (connection->lock_socket_.test_and_set()) {
     LOG(INFO) << "connection socket used by other ..." << connection->addr();
@@ -347,10 +348,10 @@ void Scheduler::push_heartbeat(std::shared_ptr<Connection>& connection) {
   }
 
   connection->touch();
-  if (!SendOps::send_bulk(connection->socket_, OpCode::kHeartBeat, msg, 2,
-                          bigdata_ptr_->taskid(), bigdata_ptr_->epchoid(),
-                          bigdata_ptr_->nfactors(), 0, bigdata_ptr_->lambda(),
-                          bigdata_ptr_->confidence())) {
+  if (!SendOps::send_message(
+        connection->socket_, OpCode::kHeartBeat, msg, bigdata_ptr_->taskid(),
+        bigdata_ptr_->epchoid(), bigdata_ptr_->nfactors(), 0,
+        bigdata_ptr_->lambda(), bigdata_ptr_->confidence())) {
     LOG(ERROR) << "sending heartbeat to " << connection->addr() << " failed.";
   }
 

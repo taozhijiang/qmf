@@ -54,6 +54,12 @@ class Matrix {
     return ncols_;
   }
 
+  // clear all data
+  void clear() {
+    for (size_t i = 0; i < data_.size(); ++i)
+      data_[i] = Double();
+  }
+
   // computes matrix transpose, X^T
   Matrix transpose() const;
 

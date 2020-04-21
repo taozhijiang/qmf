@@ -41,7 +41,7 @@ void WALSEngine::init(const std::vector<DatasetElem>& dataset) {
   groupSignals(userSignals_, userIndex_, mutableDataset);
   // swap userId with itemId
   for (auto& elem : mutableDataset) {
-  // g++ will complain for "cannot bind packed field to xxx&"
+    // g++ will complain for "cannot bind packed field to xxx&"
 #if !defined(__GNUC__)
     std::swap(elem.userId, elem.itemId);
 #else
@@ -248,7 +248,8 @@ void WALSEngine::computeXtX(const Matrix& X, Matrix* out) {
   // assert X and out samesize
 
   // omp_set_num_threads(16);
-
+  
+  out->clear();
   const size_t nrows = X.nrows();
   const size_t ncols = X.ncols();
 

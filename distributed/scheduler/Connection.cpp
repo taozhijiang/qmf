@@ -125,7 +125,7 @@ bool Connection::handle_head() {
   case static_cast<int>(OpCode::kCalc):
   case static_cast<int>(OpCode::kHeartBeat):
   default:
-    LOG(FATAL) << "invalid OpCode received from scheduler:"
+    LOG(FATAL) << "invalid OpCode received by scheduler:"
                << static_cast<int>(head_.opcode);
     retval = false;
     break;
@@ -237,7 +237,6 @@ bool Connection::handle_body() {
       if (head_.taskid != bigdata_ptr->taskid() ||
           head_.epchoid != bigdata_ptr->epchoid()) {
         LOG(ERROR) << "unmatch calc response: " << head_.dump();
-        RecvOps::recv_and_drop(socket_, head_.length);
         break;
       }
 
@@ -392,7 +391,20 @@ bool Connection::handle_body() {
       } else {
 
         // GOOD, latest info for this connection.
+        // don't forget to update the latest labor information to our Scheduler
+        // local record
 
+        std::string message = std::string(data_.data(), data_idx_);
+        VLOG(3) << "kPushFixedRsp recv with " << message;
+
+        if (message == "OK") {
+          LOG(INFO) << "kPushFixedRsp OK from " << addr()
+                    << ", update our status";
+          taskid_ = head_.taskid;
+          epchoid_ = head_.epchoid;
+        }
+        reset();
+        break;
       }
 
     } while (0);

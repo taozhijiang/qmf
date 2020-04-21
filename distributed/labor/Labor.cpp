@@ -185,8 +185,10 @@ bool Labor::handle_head() {
 
     RecvOps::recv_and_drop(socketfd_, head_.length);
 
-    if (!SendOps::send_bulk(socketfd_, OpCode::kInfoRsp, OK, strlen(OK),
-                            bigdata_ptr_->taskid(), bigdata_ptr_->epchoid())) {
+    const std::string message = "OK";
+    if (!SendOps::send_message(socketfd_, OpCode::kInfoRsp, message,
+                               bigdata_ptr_->taskid(),
+                               bigdata_ptr_->epchoid())) {
       LOG(ERROR) << "send OpCode::kInfoRsp failed.";
     }
 
@@ -304,6 +306,8 @@ bool Labor::handle_head() {
 
     VLOG(3) << "YtY matrix size: (" << bigdata_ptr_->YtY_ptr_->ncols() << ","
             << bigdata_ptr_->YtY_ptr_->ncols() << ")";
+
+    // clear before calculate
     if (iterate_user) {
       const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
       engine_ptr_->computeXtX(matrix, bigdata_ptr_->YtY_ptr_.get());

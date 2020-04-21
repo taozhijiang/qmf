@@ -45,8 +45,15 @@ class SendOps {
   }
 
   // 简易发送消息的函数，如果出错返回false
-  static bool
-    send_message(int socketfd, enum OpCode code, const std::string& msg) {
+  static bool send_message(int socketfd,
+                           enum OpCode code,
+                           const std::string& msg,
+                           uint32_t taskid = 0,
+                           uint32_t epchoid = 0,
+                           uint32_t nfactors = 0,
+                           uint32_t bucket = 0,
+                           double lambda = 0,
+                           double confidence = 0) {
 
     char buff[kTrivalMsgSize + kHeadSize]{};
     LOG_IF(ERROR, msg.size() > kTrivalMsgSize)
@@ -54,6 +61,12 @@ class SendOps {
 
     Head head(code);
     head.length = msg.size();
+    head.taskid = taskid;
+    head.epchoid = epchoid;
+    head.nfactors = nfactors;
+    head.bucket = bucket;
+    head.lambda = lambda;
+    head.confidence = confidence;
     head.to_net_endian();
     ::memcpy(buff, reinterpret_cast<const char*>(&head), kHeadSize);
     ::memcpy(buff + kHeadSize, msg.c_str(), msg.size());

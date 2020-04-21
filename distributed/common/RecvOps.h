@@ -60,7 +60,8 @@ class RecvOps {
         return false;
       }
 
-      VLOG(3) << "recv " << recv << ", retval " << retval;
+      VLOG(3) << "recv " << recv << ", retval " << retval << ", expect total "
+              << kHeadSize;
       recv += retval;
     }
 
@@ -98,7 +99,8 @@ class RecvOps {
       }
 
       recv += retval;
-      VLOG(3) << "recv " << recv << ", retval " << retval;
+      VLOG(3) << "recv " << recv << ", retval " << retval << ", expect total "
+              << head.length;
     }
 
     VLOG(3) << "total recv " << recv;
@@ -134,7 +136,8 @@ class RecvOps {
       }
 
       recv += retval;
-      VLOG(3) << "recv " << recv << ", retval " << retval;
+      VLOG(3) << "recv " << recv << ", retval " << retval << ", expect total "
+              << len;
     }
 
     VLOG(3) << "total recv " << recv;

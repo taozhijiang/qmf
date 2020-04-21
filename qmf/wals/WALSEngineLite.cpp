@@ -169,13 +169,6 @@ Double WALSEngineLite::iterate(uint64_t start_index,
   Matrix& X = leftData.getFactors();
   const Matrix& Y = rightData.getFactors();
 
-  // Matrix YtY = computeXtX(Y);
-
-  // ! create new YtY computs OK, but when using bigdata_ptr_->YtY_ptr_
-  // ! the result is error
-  Matrix YtY(X.ncols(), X.ncols());
-  computeXtX(Y, &YtY);
-
 #if defined(__GNUC__)
 //  omp_set_num_threads(16);
 #endif
@@ -183,7 +176,6 @@ Double WALSEngineLite::iterate(uint64_t start_index,
   Double loss = 0.0;
   const auto alpha = bigdata_ptr_->confidence();
   const auto lambda = bigdata_ptr_->lambda();
-  // Matrix YtY = *(bigdata_ptr_->YtY_ptr_);
 
 #pragma omp parallel reduction(+ : loss)
   {
@@ -192,7 +184,8 @@ Double WALSEngineLite::iterate(uint64_t start_index,
     for (uint64_t i = start_index; i < end_index; ++i) {
       const size_t leftIdx = leftIndex.idx(leftSignals[i].sourceId);
       loss += updateFactorsForOne(X.data(leftIdx), X.ncols(), Y, rightIndex,
-                                  leftSignals[i], YtY, alpha, lambda);
+                                  leftSignals[i], *(bigdata_ptr_->YtY_ptr_),
+                                  alpha, lambda);
     }
   }
 
@@ -209,6 +202,7 @@ void WALSEngineLite::computeXtX(const Matrix& X, Matrix* out) {
 
   const size_t nrows = X.nrows();
   const size_t ncols = X.ncols();
+  out->clear();
 
 #pragma omp parallel for
   for (size_t k = 0; k < nrows; ++k) {
