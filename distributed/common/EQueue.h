@@ -77,8 +77,7 @@ class EQueue {
     // timeout    wakeup by timeout expiration
     while (items_.empty()) {
 
-      // 如果超时，则直接到check处进行最后检查
-      // 如果是伪唤醒，则还需要检查items_是否为空，如果是空则继续睡眠
+      // if timeout occurs, jump to the cheak final result
 
 #if __cplusplus >= 201103L
       if (item_notify_.wait_until(lock, expire_tp) == std::cv_status::timeout) {
@@ -117,9 +116,6 @@ class EQueue {
     // timeout    wakeup by timeout expiration
     while (items_.empty()) {
 
-      // 如果超时，则直接到check处进行最后检查
-      // 如果是伪唤醒，则还需要检查items_是否为空，如果是空则继续睡眠
-
 #if __cplusplus >= 201103L
       if (item_notify_.wait_until(lock, expire_tp) == std::cv_status::timeout) {
         break;
@@ -141,7 +137,7 @@ class EQueue {
     return true;
   }
 
-  // 只有t不存在的时候才添加
+  // push when "t" does not exist
   bool UNIQUE_PUSH(const T& t) {
     std::lock_guard<std::mutex> lock(lock_);
     if (std::find(items_.begin(), items_.end(), t) == items_.end()) {

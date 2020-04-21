@@ -80,14 +80,12 @@ class Scheduler {
   // This is the core bucket distribution algorithm, improve it!
   bool iterate_factors();
 
-  // 只检查所有可用的labor数目
-  // check为true，则校验taskid和epcho相匹配的labor数目
+  // return our connected labors' count
+  // when check == true, we will check the taskid and epchoid
   size_t connections_count(bool check = false);
 
   std::unique_ptr<Select> select_ptr_;
 
-  // 保留所有客户端的连接
-  // 每次任务执行的开始，使用一个快照；更新的时候也是使用智能指针保护
 
  private:
   std::mutex connections_mutex_;

@@ -18,6 +18,8 @@ namespace distributed {
 class NetUtil {
 
  public:
+  // Increase the SND/RCV BUF size, hope this can increase the network
+  // performance and throughput
   static void optimize_send_recv_buff(int socketfd,
                                       const int sz = (5 << 20) /* 5M */) {
 

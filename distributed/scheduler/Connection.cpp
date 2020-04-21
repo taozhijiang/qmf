@@ -228,19 +228,20 @@ bool Connection::handle_body() {
     auto& bigdata_ptr = scheduler_.bigdata_ptr();
     auto& engine_ptr = scheduler_.engine_ptr();
 
-    // TODO 直接下载到指定内存，避免拷贝
+    // note: we can not download the data directly to the destination, because
+    // we should check whether the result is valid
     VLOG(3) << "already recv data size: " << data_idx_;
 
     do {
 
-      // 非匹配的结果，直接丢弃
+      // the result is not our desire, drop and return
       if (head_.taskid != bigdata_ptr->taskid() ||
           head_.epchoid != bigdata_ptr->epchoid()) {
         LOG(ERROR) << "unmatch calc response: " << head_.dump();
         break;
       }
 
-      // 拷贝到区域，更新 bucket_bits_
+      // copy the result to the destination, and then update bucket_bits_
 
       char* dest = nullptr;
       uint64_t len = 0;
@@ -252,7 +253,7 @@ bool Connection::handle_body() {
         const uint64_t end_idx =
           std::min<uint64_t>(start_idx + kBucketSize, engine_ptr->nusers());
 
-        // 回传 user factors 结果
+        // users factors
         const qmf::Matrix& matrix = bigdata_ptr->user_factor_ptr_->getFactors();
         dest = reinterpret_cast<char*>(
           const_cast<qmf::Matrix&>(matrix).data(start_idx));
@@ -271,7 +272,7 @@ bool Connection::handle_body() {
         const uint64_t end_idx =
           std::min<uint64_t>(start_idx + kBucketSize, engine_ptr->nitems());
 
-        // 回传 user factors 结果
+        // items factors
         const qmf::Matrix& matrix = bigdata_ptr->item_factor_ptr_->getFactors();
         dest = reinterpret_cast<char*>(
           const_cast<qmf::Matrix&>(matrix).data(start_idx));
@@ -305,13 +306,11 @@ bool Connection::handle_body() {
 
   case static_cast<int>(OpCode::kInfoRsp): {
 
-    // 正常情况下，Scheduler开始计算的时候，都会将评价矩阵和每一轮
-    // 的FixedFactor发送给所有Labor，然后再开始分片计算，但是如果
-    // 有中途失败或者重新加入的机器，就会出现状态不一致的情况，这个时
-    // 候返回Error，Scheduler根据返回的Head信息选择重新推送Rate或
-    // 者是FixedFactor即可
-
-    // 补发需要和主线程push进行互斥保护，否则labor可能收到乱序的不完整报文
+    // this is the backup schema part
+    // when Labors receive the kHeartBeat message, or the Scheduler's request
+    // check failed, then the Labor will send its local taskid and epchoid,
+    // indicates the already received data, then Scheduler can decide whether
+    // the Labor is in stale status.
 
     auto& bigdata_ptr = scheduler_.bigdata_ptr();
 

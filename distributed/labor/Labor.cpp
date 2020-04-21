@@ -150,7 +150,6 @@ void Labor::loop() {
 
     bool critical = false;
 
-    // 自带socket超时机制
     bool retval = RecvOps::try_recv_head(socketfd_, &head_, &critical);
     if (critical) {
       LOG(ERROR) << "recv head failed.";
@@ -245,10 +244,10 @@ bool Labor::handle_head() {
 
   case static_cast<int>(OpCode::kPushFixed): {
 
-    // 只有之前的taskid一致，才可以接受kPushFixed
+    // we only accept this kPushFixed when taskid match
     //
-    // ! 即使是检查错误，这里也需要把剩余的 length 数据读取完
-    // ! 否则下次通信的时候还是会串话，导致头解析失败
+    // ! even though we may check failed, we still need to read the content out
+    // ! (head.length), else it will be treated as the following session
     //
 
     VLOG(3) << "OpCode::kPushFixed head " << std::endl << head_.dump();
@@ -328,7 +327,9 @@ bool Labor::handle_head() {
 
     VLOG(3) << "OpCode::kCalc head " << std::endl << head_.dump();
 
-    // 只有taskid和epchoid完全一致，才可以进行计算
+    // check only if our local taskid and epchoid matches the requests, then we
+    // can proceed the calculate task.
+
     if (head_.taskid != bigdata_ptr_->taskid() ||
         head_.epchoid != bigdata_ptr_->epchoid()) {
       LOG(ERROR) << "taskid/epchoid mismatch, local " << bigdata_ptr_->taskid()
@@ -344,10 +345,10 @@ bool Labor::handle_head() {
       break;
     }
 
-    // 没用的两个字节 "CA"
+    // nonsense "CA"
     RecvOps::recv_and_drop(socketfd_, head_.length);
 
-    // 执行计算
+    // the main calculate part, iterate the range's factors' update
     bool iterate_user = bigdata_ptr_->epchoid() % 2;
     if (iterate_user) {
 
@@ -361,7 +362,7 @@ bool Labor::handle_head() {
         *bigdata_ptr_->item_factor_ptr_, engine_ptr_->itemIndex_);
       LOG(INFO) << "bucket " << head_.stepinfo() << " loss: " << loss;
 
-      // 回传 user factors 结果
+      // send back
       const qmf::Matrix& matrix = bigdata_ptr_->user_factor_ptr_->getFactors();
       const char* dat = reinterpret_cast<char*>(
         const_cast<qmf::Matrix&>(matrix).data(start_idx));
@@ -386,7 +387,7 @@ bool Labor::handle_head() {
         *bigdata_ptr_->user_factor_ptr_, engine_ptr_->userIndex_);
       LOG(INFO) << "bucket " << head_.stepinfo() << " loss: " << loss;
 
-      // 回传 item factors 结果
+      // send back
       const qmf::Matrix& matrix = bigdata_ptr_->item_factor_ptr_->getFactors();
       const char* dat = reinterpret_cast<char*>(
         const_cast<qmf::Matrix&>(matrix).data(start_idx));

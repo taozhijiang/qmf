@@ -113,13 +113,13 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     bigdata_ptr_->incr_epchoid();
     push_all_fixed_factors();
 
-    // // waiting all FixedLoad
-    // while ((fixed_count = connections_count(true)) < kQuorumsConnectionCount) {
+    // waiting more than half FixedLoad
+    while ((fixed_count = connections_count(true)) < kQuorumsConnectionCount) {
 
-    //   LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
-    //             << ", expect at least " << kQuorumsConnectionCount;
-    //   std::this_thread::sleep_for(std::chrono::seconds(1));
-    // }
+      LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
+                << ", expect at least " << kQuorumsConnectionCount;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 
     LOG(INFO) << "begin iterate users factors ...";
     if (!iterate_factors()) {
@@ -132,13 +132,13 @@ bool Scheduler::RunOneTask(const std::shared_ptr<TaskDef>& taskdef) {
     bigdata_ptr_->incr_epchoid();
     push_all_fixed_factors();
 
-    // // waiting all FixedLoad
-    // while ((fixed_count = connections_count(true)) < kQuorumsConnectionCount) {
+    // waiting more then half FixedLoad
+    while ((fixed_count = connections_count(true)) < kQuorumsConnectionCount) {
 
-    //   LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
-    //             << ", expect at least " << kQuorumsConnectionCount;
-    //   std::this_thread::sleep_for(std::chrono::seconds(1));
-    // }
+      LOG(INFO) << "waiting ... current fixedload labor count " << fixed_count
+                << ", expect at least " << kQuorumsConnectionCount;
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
 
     LOG(INFO) << "begin iterate items factors ...";
     if (!iterate_factors()) {

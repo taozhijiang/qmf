@@ -12,11 +12,10 @@
 
 namespace distributed {
 
-
-// 将所有计算按照下面的计数进行等分，每次计算请求只需要传递索引号就可以了
+// all Labors share the same dataset with Scheduler, so we just need to pass the
+// calculate segment index, the Labor inference the actual range
 const size_t kBucketSize = 10000;
-const size_t kBucketBits = 10000; //1亿的user/item维度，可以了吧
-
+const size_t kBucketBits = 10000; // support maxium 100m users/items
 
 const size_t kTrivalMsgSize = 128;
 

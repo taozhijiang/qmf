@@ -44,7 +44,6 @@ class SendOps {
     return true;
   }
 
-  // 简易发送消息的函数，如果出错返回false
   static bool send_message(int socketfd,
                            enum OpCode code,
                            const std::string& msg,
@@ -54,6 +53,8 @@ class SendOps {
                            uint32_t bucket = 0,
                            double lambda = 0,
                            double confidence = 0) {
+
+    // combine the Head and body send with one syscall
 
     char buff[kTrivalMsgSize + kHeadSize]{};
     LOG_IF(ERROR, msg.size() > kTrivalMsgSize)

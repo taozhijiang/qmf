@@ -34,15 +34,16 @@ class RecvOps {
     while (recv < kHeadSize) {
       int retval = ::read(socketfd, ptr + recv, kHeadSize - recv);
       if (retval < 0) {
-        // read 超时
+
         if (errno == EAGAIN || errno == EWOULDBLOCK) {
 
-          // 对于已经接收了部分数据的，等待剩余数据
+          // if we have already received some data, even though timeout occurs,
+          // we still try to read more data
           if (recv > 0) {
             continue;
           }
 
-          // 什么都每收到，not critical
+          // else, nothing received at all, not critical and return
           // VLOG(3) << "recv timeout, and no previous recv: " << recv;
           return false;
 
@@ -60,7 +61,7 @@ class RecvOps {
         return false;
       }
 
-      VLOG(3) << "recv " << recv << ", retval " << retval << ", expect total "
+      VLOG(3) << "retval " << retval << ", and already " << recv << " of total "
               << kHeadSize;
       recv += retval;
     }
@@ -85,7 +86,8 @@ class RecvOps {
     while (recv < head.length) {
       int retval = ::read(socketfd, buff + recv, head.length - recv);
       if (retval < 0) {
-        // recv 超时
+
+        // receive timeout occurs, but still try to read for Body
         if (errno == EAGAIN || errno == EWOULDBLOCK)
           continue;
 
@@ -99,7 +101,7 @@ class RecvOps {
       }
 
       recv += retval;
-      VLOG(3) << "recv " << recv << ", retval " << retval << ", expect total "
+      VLOG(3) << "retval " << retval << ", and already " << recv << " of total "
               << head.length;
     }
 
@@ -107,7 +109,7 @@ class RecvOps {
     return true;
   }
 
-  // 读取 len 个数据，废弃掉
+  // read out len's data, drop the content
   static bool recv_and_drop(int socketfd, uint64_t len) {
 
     if (len == 0)
@@ -122,7 +124,6 @@ class RecvOps {
         ::read(socketfd, buff, std::min<uint64_t>(sizeof(buff), len - recv));
       if (retval < 0) {
 
-        // recv 超时
         if (errno == EAGAIN || errno == EWOULDBLOCK)
           continue;
 
@@ -136,7 +137,7 @@ class RecvOps {
       }
 
       recv += retval;
-      VLOG(3) << "recv " << recv << ", retval " << retval << ", expect total "
+      VLOG(3) << "retval " << retval << ", and already " << recv << " of total "
               << len;
     }
 

@@ -226,7 +226,9 @@ bool Scheduler::push_all_rating_matrix() {
 
   connections_ptr_type copy_connections = share_connections_ptr();
 
-  // TODO: 今后如果没有没有发现labor，则scheduler执行单机计算
+  // TODO: improve in the future
+  // when no labors available, we will do local standalone calculate.
+
   if (copy_connections->empty()) {
     LOG(ERROR) << "no labor available now.";
     return false;
@@ -377,8 +379,7 @@ size_t Scheduler::connections_count(bool check) {
       ++count;
     } else {
 
-      // need check, but connection status is old
-      // stale detection
+      // connection status may be stale, here send heartbeat to check
       time_t timeout = kHeartBeatInternal;
       if (connection->is_stale(timeout)) {
         push_heartbeat(connection);
